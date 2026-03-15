@@ -52,8 +52,11 @@ def process_payload(msg_id, f):
         # Byte 9:
         data["T3_ODU_Coil_Temp"] = (f[9] - 61) / 2
         
-        # Byte 10: 
-        data["T4_Outdoor_Temp"] = (f[10] * .33) - 13.26 # not sure where this came from and need to add quater degree 0001_20 b[15]
+        # Byte 10 & 15: T4 Outdoor Ambient Temperature
+        # Base offset of -61. Byte 15 provides fractions (0, 64, 128, 192) = (0.0, 0.125, 0.25, 0.375)
+        base_temp_c = (f[10] - 61) / 2
+        fraction_c = f[15] / 512
+        data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
         
         # Byte 11:
         data["TP_Discharge_Temp"] = f[11] / 2
@@ -69,7 +72,7 @@ def process_payload(msg_id, f):
         modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry", 0x07: "Defrost"}
         data["ODU_Mode"] = modes.get(raw_odu_mode, f"Unknown({raw_odu_mode:02X})")
         
-        # Byte 15: Outside temp 1/4 degree / still need to figure out the basics :(
+        # Byte 15:
         
         # Byte 16:
 
