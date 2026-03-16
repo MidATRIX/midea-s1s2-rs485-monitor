@@ -96,7 +96,7 @@ class SenvilleMQTT:
         self.register_sensor("Run_Hours_Clock", unit="h", device_class="duration")
         # 0001_52
         self.register_sensor("IPM_Heatsink_Temp_1", unit="°C", device_class="temperature")
-        self.register_sensor("IPM_Heatsink_Temp_1", unit="°C", device_class="temperature")
+        self.register_sensor("IPM_Heatsink_Temp_2", unit="°C", device_class="temperature")
         self.register_sensor("Compressor_PID_Step", state_class="measurement")
         self.register_sensor("IPM_Phase_Current_A", unit="A", device_class="current")
         self.register_sensor("IPM_Phase_Current_B", unit="A", device_class="current")
