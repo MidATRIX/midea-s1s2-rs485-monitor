@@ -1,9 +1,9 @@
 # src/config.py
 import os
 
-# --- NETWORK BRIDGE ---
-WAVESHARE_IP = "192.168.86.185"
-WAVESHARE_PORT = 8888
+# --- NETWORK BRIDGE ---          # options to overide config setting while starting - useful for simulator
+WAVESHARE_IP = "192.168.86.185"   # --ip <ip_address> 
+WAVESHARE_PORT = 8888             # --port <port_number>
 
 # --- HOME ASSISTANT ---
 HA_HOST = "192.168.86.180"
@@ -15,7 +15,7 @@ MQTT_USER = "USERNAME"
 MQTT_PASS = "PASSWORD"
 
 # Root directory for shared telemetry / SQLite database
-SQLITE_DB_DIR = "/var/lib/midea_telemetry"
+SQLITE_DB_DIR = "data/"
 
 # --- FILE PATHS ---
 # Using absolute paths based on the file location to prevent "File Not Found" errors
