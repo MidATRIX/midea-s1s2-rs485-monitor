@@ -16,26 +16,18 @@ class FrameValidator:
         return crc.to_bytes(2, 'little')
 
     def process(self, frame: bytes):
-        if not frame or len(frame) < 10:
+        if not frame or len(frame) < 9:
             return "🗑️", 0, "NONE"
 
-        # Check if this is an 01 direction frame (which has the 00 padding byte at the end)
-        is_padded = (frame[1] == 0x01)
-
-        # Dynamically slice based on the padding
-        if is_padded:
-            data_packet = frame[:-3]        
-            actual_crc_bytes = frame[-3:-1] 
-        else:
-            data_packet = frame[:-2]        
-            actual_crc_bytes = frame[-2:]   
+        # Frame is now guaranteed to have NO padding byte.
+        # The last 2 bytes are ALWAYS the CRC.
+        data_packet = frame[:-2]
+        actual_crc_bytes = frame[-2:]   
 
         actual_crc_int = int.from_bytes(actual_crc_bytes, 'little')
         expected_crc_bytes = self.crc16_modbus(data_packet)
-        expected_crc_int = int.from_bytes(expected_crc_bytes, 'little')
         
         msg_id = f"{frame[1]:02X}{frame[2]:02X}_{frame[3]:02X}"
-        
         
         if actual_crc_bytes == expected_crc_bytes:
             return "✅", actual_crc_int, msg_id 
