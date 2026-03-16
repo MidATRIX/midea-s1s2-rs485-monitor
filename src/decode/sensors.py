@@ -3,251 +3,259 @@ def process_payload(msg_id, f):
 
     if msg_id == "0100_20" and len(f) >= 20:
         
-        # Byte 5:
+        # IDU5
         
-        # Byte 6:
+        # IDU6:
         raw_idu_mode = f[6]
         modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry"}
         data["IDU_Mode"] = modes.get(raw_idu_mode, f"Unknown({raw_idu_mode:02X})")
        
-        # Byte 7:
+        # IDU7:
         data["IDU_Demand_Hz"] = f[7]
         
-        # Byte 8: ? 0x80 - soft start flag
+        # IDU8: ? 0x80 - soft start flag - doesnt show in db due to dropped frames
         
-        # Byte 9:
+        # IDU9:
         
-        # Byte 10:
+        # IDU10:
         
-        # Byte 11:
+        # IDU11:
         data["Target_Setpoint"] = f[11]
 
-        # Byte 12:
+        # IDU12:
         raw_fan = f[12]
         fan_map = {0x01: "High", 0x02: "Medium", 0x03: "Low", 0x06: "Boost", 0x0F: "Auto"}
         data["IDU_Blower_Speed"] = fan_map.get(raw_fan, f"Raw({raw_fan:02X})")
         
-        # Byte 13:
+        # IDU13:
         data["T1_Room_Temp"] = (f[13] - 61) / 2 # if mode off or dry 61 else 66 / clearly not done
         
-        # Byte 14:
+        # IDU14:
         data["T2_IDU_Coil_Temp"] = (f[14] - 61) / 2
         
-        # Byte 15:
+        # IDU15:
         
-        # Byte 16: Mode Flags (Bit 1 = Boost) / forgot about this
-#         data["boost_mode"] = True if (f[16] & 2) else False
+        # IDU16: Mode Flags (Bit 1 = Boost) / forgot about this
 
-#        data["0100_20"] = "0100_20"
+        # IDU17:
 
 
 
     elif msg_id == "0001_20" and len(f) >= 20:
         
-        # Byte 7: Actual Load
+        # ODU7: Actual Load
         data["Compressor_Actual_Hz"] = f[6] # In defrost mode it got up to 80Hz
         
-        # Byte 8:
+        # ODU8:
         
-        # Byte 9:
+        # ODU9:
         data["T3_ODU_Coil_Temp"] = (f[9] - 61) / 2
         
-        # Byte 10 & 15: T4 Outdoor Ambient Temperature
+        # ODU10 & 15: T4 Outdoor Ambient Temperature (High Resolution)
+        # Combines the base 0.5°C steps with the 0.125°C fractions
+#        data["T4_Outdoor_Temp"] = ((f[10] - 50) / 2) + (f[15] / 512)
+        
+        # ODU10 & 15: T4 Outdoor Ambient Temperature
         # Base offset of -61. Byte 15 provides fractions (0, 64, 128, 192) = (0.0, 0.125, 0.25, 0.375)
         base_temp_c = (f[10] - 61) / 2
         fraction_c = f[15] / 512
         data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
         
-        # Byte 11:
+        # ODU11:
         data["TP_Discharge_Temp"] = f[11] / 2
         
-        # Byte 12:
+        # ODU12:
         data["Compressor_Actual_Amps"] = f[12] / 2
         
-        # Byte 13: ? Resistance
+        # ODU13: ? Resistance
         data["0001_20_b13"] = f[13]
 
-        # Byte 14: ODU Mode
+        # ODU14: ODU Mode
         raw_odu_mode = f[14]
         modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry", 0x07: "Defrost"}
         data["ODU_Mode"] = modes.get(raw_odu_mode, f"Unknown({raw_odu_mode:02X})")
         
-        # Byte 15:
+        # ODU15: Outside temp 1/4 degree / still need to figure out the basics :(
         
-        # Byte 16:
+        # ODU16:
+        
+        # ODU17:
 
-#        data["0001_20"] = "0001_20"
-   
 
 
 
 
     elif msg_id == "0001_50" and len(f) >= 19:
     
-        # Byte 5:
+        # HPA5:
         
-        # Byte 6:
+        # HPA6:
         
-        # Byte 7:
+        # HPA7:
         
-        # Byte 8:
+        # HPA8:
         
-        # Byte 9:
+        # HPA9:
         
-        # Byte 10:
+        # HPA10:
         
-        # Byte 11:
+        # HPA11:
         data["ODU_Fan_Speed_Actual_RPM"] = f[11] * 8
         
-        # Byte 12:
+        # HPA12:
         data["ODU_DC_Bus_Voltage_Actual"] = f[12]
         
-        # Byte 13:
+        # HPA13:
         
-        # Byte 14:
+        # HPA14:
         data["AC_Input_Voltage_V"] = f[14]
         
-        # Byte 15:
+        # HPA15:
         data["Inverter_DC_Bus_Voltage_V"] = f[15]
         
-        # Byte 16:
+        # HPA16:
         data["IPM_Load_Index"] = f[16] # I no longer think this is amp average but it is a caculated number
         
-#        data["0001_50"] = "0001_50"
+        # HPA17:
+        
 
 
 
 
     elif msg_id == "0001_51" and len(f) >= 20:         
 
-        # Byte 5:
+        # HPB5:
         data["ODU_Fan_Speed_Target_RPM"] = f[5] * 8
         
-        # Byte 6:
+        # HPB6:
         data["ODU_DC_Bus_Voltage_Target"] = f[6]
         
-        # Byte 7:
+        # HPB7:
         
-        # Byte 8:
+        # HPB8:
         
-        # Byte 9:
+        # HPB9:
         
-        # Byte 10:
+        # HPB10:
         
-        # Byte 11:
-        data["Run_Minutes_Clock"] = f[11]
+        # HPB11: Active running mins
+        data["Run_Session_Minutes"] = f[11]
         
-        # Byte 12:
-        data["Run_Hours_Clock"] = (f[12] * 256) / 60
+        # HPB12: ticks every 60 active running mins
+        # HPB13: ticks every 256 active running hours
+        data["Run_Hours_Clock"] = (f[13] * 256) + f[12]
         
-        # Byte 13:
+        # HPB14:
         
-        # Byte 14:
+        # HPB15:
         
-        # Byte 15:
+        # HPB16:
         
-        # Byte 16:
+        # HPB17:
         
-#        data["0001_51"] = "0001_51"
         
         
         
     elif msg_id == "0001_52" and len(f) >= 20:
 
-        # Byte 5:
+        # HPC5:
         
-        # Byte 6:
+        # HPC6:
         
-        # Byte 7:
+        # HPC7:
         data["IPM_Heatsink_Temp_1"] = f[7]
         
-        # Byte 8:
+        # HPC8:
         data["IPM_Heatsink_Temp_2"] = f[8]
         
-        # Byte 9: Signed integer (Two's Complement)
+        # HPC9: Signed integer (Two's Complement)
         raw_delta = f[9]
-        data["PID_Step_Delta"] = raw_delta if raw_delta <= 127 else raw_delta - 256 #
+        data["Compressor_PID_Step"] = raw_delta if raw_delta <= 127 else raw_delta - 256 #
         
-        # Byte 10:
+        # HPC10:
         data["IPM_Phase_Current_A"] = f[10] # This is not PID_P_Error
         
-        # Byte 11:
+        # HPC11:
         data["IPM_Phase_Current_B"] = f[11] # This is not PID_I_Error
         
-        # Byte 12:
+        # HPC12:
         
-        # Byte 13: HPC13 is the ODU Fan Speed Step (Gear Index)
+        # HPC13: HPC13 is the ODU Fan Speed Step (Gear Index)
         data["ODU_Fan_Speed_Step"] = f[13]
-        # Byte 14:
         
-        # Byte 15:
+        # HPC14:
         
-        # Byte 16:
+        # HPC15:
         
-#        data["0001_52"] = "0001_52"
+        # HPC16:
+        
+        # HPC17:
+        
 
 
 
     elif msg_id == "0001_53" and len(f) >= 20:
 
-        # Byte 5:
-        
-        # Byte 6: Routine Phase Modifier (Signed 8-bit)
+        # HPD5:
+                
+        # HPD6: Routine Phase Modifier (Signed 8-bit)
         raw_phase_mod = f[6]
         data["Phase_Modifier"] = raw_phase_mod if raw_phase_mod <= 127 else raw_phase_mod - 256
         
-        # Byte 7: 0-4 = Idle, 5-9 = Active Ramp
+        # HPD7: 0-4 = Idle, 5-9 = Active Ramp
         data["Routine_Phase_Step"] = f[7]
         
-        # Byte 8: Triggered by Oil Return or High Load
+        # HPD8: Triggered by Oil Return or High Load
         data["Active_Ramp_Routine"] = f[8]
         
-        # Byte 9:
+        # HPD9:
         
-        # Byte 10:
+        # HPD10:
         
-        # Byte 11: EEV Low
-        # Byte 12: EEV High
+        # HPD11: EEV Low
+        # HPD12: EEV High
         data["EXV_Position_Steps"] = (f[12] * 256) + f[11] # in defrost mode it got up to 4000 steps
         
-        # Byte 13: The PID target limit
+        # HPD13: The PID target limit
         data["ODU_Target_Hz"] = f[13]
         
-        # Byte 14:
+        # HPD14:
         
-        # Byte 15:
+        # HPD15:
         
-        # Byte 16:
+        # HPD16:
         
-#        data["0001_53"] = "0001_53"
+        # HPD17:
+        
 
         
 #    elif msg_id == "0001_25" and len(f) >= 20:      
-        # Byte 5:
+        # ODUY5:
         
-        # Byte 6:
+        # ODUY6:
         
-        # Byte 7:
+        # ODUY7:
         
-        # Byte 8:
+        # ODUY8:
         
-        # Byte 9:
+        # ODUY9:
         
-        # Byte 10:
+        # ODUY10:
         
-        # Byte 11:
+        # ODUY11:
         
-        # Byte 12:
+        # ODUY12:
         
-        # Byte 13:
+        # ODUY13:
         
-        # Byte 14:
+        # ODUY14:
         
-        # Byte 15:
+        # ODUY15:
         
-        # Byte 16:
+        # ODUY16:
         
-#        data["0001_25"] = "0001_25"
+        # ODUY17:
+        
 
 
     return data
