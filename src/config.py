@@ -17,6 +17,12 @@ MQTT_PASS = "PASSWORD"
 # Root directory for shared telemetry / SQLite database
 SQLITE_DB_DIR = "data/"
 
+# --- DEVICE IDENTITY ---
+# Name used for Home Assistant device registry and MQTT topics.
+# Change this if you have multiple units or want a custom label.
+# Spaces are fine here — the code slugifies it where needed.
+DEVICE_NAME = "Testing Heat Pump"
+
 # --- FILE PATHS ---
 # Using absolute paths based on the file location to prevent "File Not Found" errors
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
