@@ -67,10 +67,10 @@ SQLITE_DB_DIR = "/var/lib/midea_telemetry"
  
 ```bash
 # From the project root
-python3 -m src.main
- 
+PYTHONPATH=src ./venv/bin/python3 -m src.main
+
 # Override connection target (e.g. for simulator testing)
-python3 -m src.main --ip 127.0.0.1 --port 5555
+PYTHONPATH=src ./venv/bin/python3 -m src.main --ip 127.0.0.1 --port 5555
 ```
  
 ---
