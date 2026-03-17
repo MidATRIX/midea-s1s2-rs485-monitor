@@ -62,14 +62,17 @@ SQLITE_DB_DIR = "/var/lib/midea_telemetry"
 ```
 
 ---
-
+ 
 ## How to Run
-
+ 
 ```bash
 # From the project root
 python3 -m src.main
+ 
+# Override connection target (e.g. for simulator testing)
+python3 -m src.main --ip 127.0.0.1 --port 5555
 ```
-
+ 
 ---
 
 ## Project Structure
@@ -121,19 +124,22 @@ data/
 ### Frame Structure (A0 frames)
 
 ```
-[A0] [DD DD] [CC] [LL] [ ... PAYLOAD ... ] [CR CR] ([00])
-  0    1  2    3    4     5 .. 5+LL-1        -3  -2    -1
+[A0] [DD DD] [CC] [LL] [ ... PAYLOAD ... ] [B17] [CR CR]
+  0    1  2    3    4     5 .. LL+4         LL+5  LL+6 LL+7
 ```
-
+ 
 | Bytes | Field | Notes |
 |---|---|---|
 | 0 | Header | `0xA0` |
 | 1–2 | Device address | `0x0001` = ODU, `0x0100` = IDU |
 | 3 | Message ID | `0x20`, `0x50`–`0x53`, etc. |
-| 4 | Payload length | Number of data bytes that follow |
-| 5..N | Payload | Sensor data |
-| N+1–N+2 | CRC | CRC-16/MODBUS, little-endian |
-| N+3 | Padding | `0x00` — present only on `direction 01` frames |
+| 4 | Payload length `LL` | Number of payload data bytes that follow |
+| 5..LL+4 | Payload | Sensor data (`LL` bytes) |
+| LL+5 | Pre-CRC byte | Part of the frame, covered by CRC. `0x00` in most frames. In the HPA frame (`0001_50`) this byte carries real sensor data — see T5 suction temp below. |
+| LL+6–LL+7 | CRC | CRC-16/MODBUS, little-endian 
+
+> **Frame validation:** The CRC covers every byte from `0xA0` through `B17` inclusive. Any frame that fails CRC is discarded and the offending bytes are logged to `data/bus_noise.log`.
+
 
 ### Checksum
 
@@ -147,13 +153,22 @@ data/
 
 ### Message Cycle
 
-Captured traffic shows a repeating exchange between ODU and IDU:
-
+The ODU is bus master. A full cycle is 24 frames and takes approximately 3.6 seconds:
+ 
 ```
-20 → 21 → 20 → 50 → 20 → 51 → 20 → 52 → 20 → 53 → 20 → 91
+ODU 20 → IDU 20 → ODU 21 → IDU 21 →
+ODU 20 → IDU 20 → ODU 50 → IDU 50 →
+ODU 20 → IDU 20 → ODU 51 → IDU 51 →
+ODU 20 → IDU 20 → ODU 52 → IDU 52 →
+ODU 20 → IDU 20 → ODU 53 → IDU 53 →
+ODU 20 → IDU 20 → ODU 91 → IDU 91
 ```
-
-Message `20` is a high-frequency core telemetry frame. The `50`–`53` series rotates through extended diagnostic data.
+ 
+- Frame `20` appears every cycle and carries core telemetry from both units.
+- Frames `50`–`53` rotate one per cycle, carrying extended ODU diagnostics.
+- Frame `21` carries a single handshake/capability byte (`0x7F` on both sides). Payload is otherwise zero.
+- Frame `91` is a keepalive heartbeat. Both ODU and IDU send all-zero payloads.
+- IDU responses to `50`–`53` and `91` are acknowledgements only — their payloads are all zeros. The ODU is the sole source of data in those exchanges.
 
 ### Example Captures
 
@@ -164,7 +179,7 @@ Message `20` is a high-frequency core telemetry frame. The `50`–`53` series ro
 
 ## Sensor Reference
 
-All byte indices are **payload-relative** (byte 5 of the raw frame = index 5, matching the DB column names HPA5, ODU5, etc).
+All byte indices are **frame-absolute** — byte 5 is the first payload byte and matches the DB column names (`HPA5`, `ODU5`, etc.). Byte 17 is the pre-CRC byte stored as `HPA17`, `ODU17`, etc.
 
 ### Confidence Levels
 - ✅ **Confirmed** — Validated against physical measurements or unambiguous observed behaviour
@@ -192,11 +207,12 @@ All byte indices are **payload-relative** (byte 5 of the raw frame = index 5, ma
 |------|-------------|---------|------|------------|-------|
 | 6 | `Compressor_Actual_Hz` | `raw` | Hz | ✅ | Real-time running frequency. Smooth ramp, confirmed 0–80 Hz observed |
 | 9 | `T3_ODU_Coil_Temp` | `(raw − 61) / 2` | °C | ⚠️ | Outdoor coil temperature. Goes strongly negative when iced (defrost trigger visible in data), unverified against a reference thermometer |
-| 10 | `T4_Outdoor_Temp` | `(raw × 0.33) − 13.26` | °C | ⚠️ | Outdoor ambient. Formula origin unknown — results are physically plausible but unverified against a reference thermometer and need to include the quater degree b[15] |
+| 10 | `T4_Outdoor_Temp` | `(raw − 61) / 2 + ODU15 / 512` | °C | ⚠️ | Outdoor ambient. Byte 10 gives 0.5°C steps, byte 15 (values 0/64/128/192) adds 0–0.375°C fractional precision. Unverified against reference thermometer |
 | 11 | `TP_Discharge_Temp` | `raw / 2` | °C | ⚠️ | Compressor discharge line temperature |
-| 12 | `Compressor_Actual_Amps` | `raw / ?` | A | ⚠️ | Divisor unconfirmed. Raw peaks at ~30 at 80 Hz defrost. Needs clamp meter validation at high load |
+| 12 | `Compressor_Actual_Amps` | `raw / 3.2` | A | ⚠️ | Divisor confirmed from service manual (display shows floor(amps); 3.2A displays as "3"). ~6.6A at 57Hz, ~7.8A at 80Hz defrost. Unverified against clamp meter |
 | 13 | `ODU_Unknown_B13` | `raw` | — | ❓ | Narrow range (177–185), stable. Possibly resistance |
 | 14 | `ODU_Mode` | enum map | — | ✅ | 0x00=Off, 0x01=Cool, 0x02=Heat, 0x03=Fan, 0x04=Dry, 0x07=Defrost |
+| 15 | `T4_Fraction` | see T4 formula | — | ✅ | Quarter-degree fractional component of T4. Values observed: 0, 64, 128, 192 = 0.0, 0.125, 0.25, 0.375°C |
 
 ---
 
@@ -209,6 +225,7 @@ All byte indices are **payload-relative** (byte 5 of the raw frame = index 5, ma
 | 14 | `AC_Input_Voltage` | `raw` | V | ✅ | Mains input voltage. Observed 179–207 V, consistent with US 240 V supply variation |
 | 15 | `Inverter_DC_Bus_Voltage` | `raw` | V | ✅ | Inverter-side DC rail, ~134–170 V (rectified from 120 V leg) |
 | 16 | `IPM_Load_Index` | `raw` | — | ⚠️ | Tracks compressor Hz nearly 1:1. Not average amps despite original label. Likely a normalised load or duty index reported by the IPM module |
+| 17 | `T5_Suction_Temp` | `(raw − 50) / 2` | °C | ⚠️ | ODU suction line temperature. Sits near room temperature at idle (~23°C). Drops sharply during compressor ramp — brief dip to ~7°C on a demand ramp, sustained drop to ~1°C during oil return. Uses a different base offset (50) than the IDU sensors (61). Useful for distinguishing oil return events from real load ramps |
 
 ---
 
@@ -218,8 +235,9 @@ All byte indices are **payload-relative** (byte 5 of the raw frame = index 5, ma
 |------|-------------|---------|------|------------|-------|
 | 5 | `ODU_Fan_Speed_Target_RPM` | `raw × 8` | RPM | ✅ | Outdoor fan target speed |
 | 6 | `ODU_DC_Bus_Voltage_Target` | `raw` | V | ✅ | DC bus target setpoint |
-| 11 | `Run_Minutes_Clock` | `raw` | min | ⚠️ | Compressor run-time minutes component |
-| 12 | `Run_Hours_Clock` | `(raw × 256) / 60` | min | ⚠️ | Compressor run-time hours component. Combined with byte 11 for total runtime |
+| 11 | `Run_Session_Minutes` | `raw` | min | ✅ | Active running minutes in the current compressor run. Ticks approximately once per real minute. Resets to 0 the moment the compressor stops. Does not roll over at 60 — continues counting until the compressor stops |
+| 12 | `Run_Lifetime_Hours` | `raw` | hrs | ✅ | Lifetime accumulated active running hours, 0–255 component. Increments every ~62 active running minutes. Does not advance when the compressor is off |
+| 13 | `Run_Lifetime_Hours_Overflow` | `raw` | — | ✅ | Increments each time `Run_Lifetime_Hours` rolls past 255. Full lifetime hours = `(byte13 × 256) + byte12`. Unit observed at 3,923 lifetime hours as of first capture (163.5 days of total compressor runtime) |
 
 ---
 
@@ -271,9 +289,9 @@ The publisher uses send-on-change logic with a 60-second heartbeat to keep value
 
 ## Database Logging
 
-Frames are logged to a daily-rotating SQLite database under `SQLITE_DB_DIR`. A `latest.db` symlink is maintained for easy Grafana integration.
+Frames are logged to a daily-rotating SQLite database under `SQLITE_DB_DIR`.
 
-Each row captures a complete message cycle — one snapshot of all six frame types combined — timestamped at the moment the cycle completes.
+Each row captures a complete message cycle — one snapshot of all six decoded frame types — timestamped at the moment the cycle completes. Payload bytes are stored individually as named columns (`IDU5`–`IDU17`, `ODU5`–`ODU17`, etc.) for direct SQL querying.
 
 ---
 
