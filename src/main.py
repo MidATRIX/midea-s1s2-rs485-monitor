@@ -12,15 +12,14 @@ from src.config import WAVESHARE_IP, WAVESHARE_PORT, KNOWN_IDS, REGISTRY_FILE, F
 from src.serial.frame_buffer import FrameBuffer
 from src.protocol.validator import FrameValidator
 from src.decode.sensors import process_payload
-from src.ha.discovery import SenvilleMQTT
+from src.ha.discovery import HAMQTT
 
 def get_target_connection():
     # Set up the command line argument parser
-    parser = argparse.ArgumentParser(description="Senville Matrix - S1/S2 Decoder")
+    parser = argparse.ArgumentParser(description="S1/S2 Bus Decoder")
     parser.add_argument('--ip', type=str, help="Override target IP address (e.g., 127.0.0.1)")
     parser.add_argument('--port', type=int, help="Override target Port number (e.g., 5555)")
-
-    # simulated setup:
+    # simulated setup
     # e.g., PYTHONPATH=. python3  src/main.py --ip 127.0.0.1 --port 5555
     #
     # production setup
@@ -49,7 +48,7 @@ async def main():
         os.makedirs("data")
         
 # --- INITIALIZE HOME ASSISTANT MQTT ---
-    ha = SenvilleMQTT(MQTT_IP, MQTT_PORT_NUMBER, MQTT_USER, MQTT_PASS)
+    ha = HAMQTT(MQTT_IP, MQTT_PORT_NUMBER, MQTT_USER, MQTT_PASS)
     
     print("⏳ Waiting for MQTT CONNACK handshake...")
     time.sleep(5)
@@ -103,8 +102,8 @@ async def main():
                         from src.decode.sensors import process_payload
                         decoded_data = process_payload(msg_id, frame)
                         
-#            #            for key, value in decoded_data.items(): #--------------------------- Comment to disable HA MQTT
-#            #                ha.publish_state(key, value)        #--------------------------- Comment to disable HA MQTT
+                        for key, value in decoded_data.items(): #--------------------------- Comment to disable HA MQTT
+                            ha.publish_state(key, value)        #--------------------------- Comment to disable HA MQTT
                     
                     # Database Save Logic
                     if sensor_name == "IDU_CORE":
