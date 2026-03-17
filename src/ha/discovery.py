@@ -2,10 +2,16 @@
 import json
 import time
 import paho.mqtt.client as mqtt
+from src.config import DEVICE_NAME
 
-class SenvilleMQTT:
+class HAMQTT:
     def __init__(self, broker_ip, broker_port=1883, username=None, password=None):
-        self.mqtt = mqtt.Client()
+        # Compute slug first so we can use it as the MQTT client ID
+        self.slug = DEVICE_NAME.lower().replace(" ", "_")
+        self.device_name = DEVICE_NAME
+        
+        # Use slug as client_id so two instances never collide on the broker
+        self.mqtt = mqtt.Client(client_id=f"s1s2_{self.slug}")
         
         # Apply credentials if provided
         if username and password:
@@ -23,18 +29,18 @@ class SenvilleMQTT:
 
     def register_sensor(self, name, unit=None, device_class=None, state_class=None):
         """Sends discovery payload to HAOS so the sensor appears automatically."""
-        topic = f"{self.prefix}/sensor/senville_{name}/config"
+        topic = f"{self.prefix}/sensor/{self.slug}_{name}/config"
         payload = {
-            "name": f"Senville {name.replace('_', ' ').title()}",
-            "state_topic": f"senville/sensor/{name}/state",
+            "name": f"{DEVICE_NAME} {name.replace('_', ' ').title()}",
+            "state_topic": f"{self.slug}/sensor/{name}/state",
             "value_template": "{{ value_json.state }}",
-            "unique_id": f"senville_{name}",
+            "unique_id": f"{self.slug}_{name}",
             "force_update": True,
             "device": {
-                "identifiers": ["senville_bus"],
-                "name": "Senville Heat Pump",
+                "identifiers": [f"{self.slug}_bus"],
+                "name": DEVICE_NAME,
                 "model": "Midea Inverter",
-                "manufacturer": "Senville"
+                "manufacturer": DEVICE_NAME.split()[0]
             }
         }
         if unit: 
@@ -55,7 +61,7 @@ class SenvilleMQTT:
         cached = self.state_cache.get(name)
 
         if force or not cached or cached['value'] != value or (current_time - cached['last_sent'] > 60):
-            topic = f"senville/sensor/{name}/state"
+            topic = f"{self.slug}/sensor/{name}/state"
             payload = json.dumps({"state": value})
             
             self.mqtt.publish(topic, payload, retain=False)
@@ -107,3 +113,4 @@ class SenvilleMQTT:
         self.register_sensor("Active_Ramp_Routine")
         self.register_sensor("EXV_Position_Steps", state_class="measurement")
         self.register_sensor("ODU_Target_Hz", unit="Hz", state_class="measurement")
+        
