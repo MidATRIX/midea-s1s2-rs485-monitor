@@ -51,13 +51,9 @@ def process_payload(msg_id, f):
         # ODU9:
         data["T3_ODU_Coil_Temp"] = (f[9] - 53) / 2
         
-        # ODU10 & 15: T4 Outdoor Ambient Temperature (High Resolution)
-        # Combines the base 0.5°C steps with the 0.125°C fractions
-#        data["T4_Outdoor_Temp"] = ((f[10] - 50) / 2) + (f[15] / 512)
-        
         # ODU10 & 15: T4 Outdoor Ambient Temperature
         # Base offset of -61. Byte 15 provides fractions (0, 64, 128, 192) = (0.0, 0.125, 0.25, 0.375)
-        base_temp_c = (f[10] - 53) / 2
+        base_temp_c = (f[10] - 61) / 2
         fraction_c = f[15] / 512
         data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
         
