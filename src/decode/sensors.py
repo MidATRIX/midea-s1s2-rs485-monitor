@@ -51,9 +51,10 @@ def process_payload(msg_id, f):
         # ODU9:
         data["T3_ODU_Coil_Temp"] = (f[9] - 53) / 2
         
-        # ODU10: T4 Outdoor Ambient Temperature. Base offset of -62 (percision e.g. "10.5C".
-        base_temp_c = (f[10] * 0.375) - 17.78 # (f[10] * 0.36905) - 16.5
+        # ODU10: T4 Outdoor Ambient Temperature.
+        base_temp_c = (f[10] * .368) - 16.75
         data["T4_Base_Outdoor_Temp"] = base_temp_c
+        data["T4_Base_Round_Down_Outdoor_Temp"] = math.floor(base_temp_c) # This is how my thermostat reports to HA. Its ugly
         
         # ODU11:
         data["TP_Discharge_Temp"] = f[11] / 2
@@ -69,8 +70,8 @@ def process_payload(msg_id, f):
         modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry", 0x07: "Defrost"}
         data["ODU_Mode"] = modes.get(raw_odu_mode, f"Unknown({raw_odu_mode:02X})")
         
-        # ODU15: Byte 15 provides fractions (0, 64, 128, 192) = (0.0, 0.125, 0.25, 0.375)
-        fraction_c = f[15] / 682.666
+        # ODU15: Byte 15 provides base_temp_c fractions (0, 64, 128, 192) = (0%, 25%, 50%, 75%)
+        fraction_c = f[15] / 695.652
         data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
         
         # ODU16:
