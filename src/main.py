@@ -13,7 +13,6 @@ from src.serial.frame_buffer import FrameBuffer
 from src.protocol.validator import FrameValidator
 from src.decode.sensors import process_payload
 from src.ha.discovery import HAMQTT
-from src.database.raw_frame_db import save_raw_frame_batch
 
 # Global queue for frames
 frame_queue = asyncio.Queue()
@@ -39,27 +38,7 @@ def get_target_connection():
     
     return target_ip, target_port
 
-async def db_writer_worker():
-    """Background task: Batch-saves frames every 5 seconds or 100 frames."""
-    from src.database.raw_frame_db import save_raw_frame_batch
-    batch = []
-    while True:
-        try:
-            # Wait for a frame; timeout triggers a flush of partial batches
-            frame = await asyncio.wait_for(frame_queue.get(), timeout=5.0)
-            batch.append(frame)
-            if len(batch) >= 100:
-                save_raw_frame_batch(batch)
-                batch = []
-            frame_queue.task_done()
-        except asyncio.TimeoutError:
-            if batch:
-                save_raw_frame_batch(batch)
-                batch = []
-
 async def main():
-    
-    asyncio.create_task(db_writer_worker())
     
     target_ip, target_port = get_target_connection()
     
