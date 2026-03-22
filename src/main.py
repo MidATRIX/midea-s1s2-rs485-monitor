@@ -8,15 +8,20 @@ import argparse
 import sys
 import paho.mqtt.client as mqtt
 from database.db_handler import init_db, save_frame
-from src.config import WAVESHARE_IP, WAVESHARE_PORT, KNOWN_IDS, REGISTRY_FILE, FRAME_SIZE, MQTT_IP, MQTT_PORT_NUMBER, MQTT_USER, MQTT_PASS
+from src.config import WAVESHARE_IP, WAVESHARE_PORT, KNOWN_IDS, REGISTRY_FILE, FRAME_SIZE, MQTT_IP, MQTT_PORT_NUMBER, MQTT_USER, MQTT_PASS, TERMINAL_PRINT_ENABLED, MQTT_ENABLED, DB_ENABLED
 from src.serial.frame_buffer import FrameBuffer
 from src.protocol.validator import FrameValidator
 from src.decode.sensors import process_payload
 from src.ha.discovery import HAMQTT
+from src.database.raw_frame_db import save_raw_frame_batch
+
+# Global queue for frames
+frame_queue = asyncio.Queue()
 
 def get_target_connection():
     # Set up the command line argument parser
     parser = argparse.ArgumentParser(description="S1/S2 Bus Decoder")
+    parser.add_argument('--c', type=str, help="comment within prompt (e.g., testing)")
     parser.add_argument('--ip', type=str, help="Override target IP address (e.g., 127.0.0.1)")
     parser.add_argument('--port', type=int, help="Override target Port number (e.g., 5555)")
     # simulated setup
@@ -29,14 +34,33 @@ def get_target_connection():
     # Parse the arguments from the terminal
     args = parser.parse_args()
     
-    # Fix: Use the directly imported variables, not "config.WAVESHARE_IP"
     target_ip = args.ip if args.ip else WAVESHARE_IP
     target_port = args.port if args.port else WAVESHARE_PORT
     
     return target_ip, target_port
 
-async def main():
+async def db_writer_worker():
+    """Background task: Batch-saves frames every 5 seconds or 100 frames."""
+    from src.database.raw_frame_db import save_raw_frame_batch
+    batch = []
+    while True:
+        try:
+            # Wait for a frame; timeout triggers a flush of partial batches
+            frame = await asyncio.wait_for(frame_queue.get(), timeout=5.0)
+            batch.append(frame)
+            if len(batch) >= 100:
+                save_raw_frame_batch(batch)
+                batch = []
+            frame_queue.task_done()
+        except asyncio.TimeoutError:
+            if batch:
+                save_raw_frame_batch(batch)
+                batch = []
 
+async def main():
+    
+    asyncio.create_task(db_writer_worker())
+    
     target_ip, target_port = get_target_connection()
     
     fb = FrameBuffer()
@@ -47,13 +71,18 @@ async def main():
     if not os.path.exists("data"):
         os.makedirs("data")
         
-# --- INITIALIZE HOME ASSISTANT MQTT ---
-    ha = HAMQTT(MQTT_IP, MQTT_PORT_NUMBER, MQTT_USER, MQTT_PASS)
+    if MQTT_ENABLED == "true":
+        ha = HAMQTT(MQTT_IP, MQTT_PORT_NUMBER, MQTT_USER, MQTT_PASS)
+        print("⏳ Waiting for MQTT CONNACK handshake...")
+        time.sleep(5)
+        ha.register_all_sensors()
+    else:
+        print("🚫 MQTT disabled")
     
-    print("⏳ Waiting for MQTT CONNACK handshake...")
-    time.sleep(5)
-    
-    ha.register_all_sensors()
+    if DB_ENABLED == "true":
+        print("✅ DB enabled")
+    else:
+        print("🚫 DB disabled")
     
     print(f"🦅 ENGAGE | {target_ip}:{target_port}")
 
@@ -85,25 +114,24 @@ async def main():
                     
                     if frame is None:
                         break
-#                    print(f"{frame.hex().upper()}\n")
                     
                     ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
                     status_icon, seed, msg_id = validator.process(frame)
                     raw_hex = frame.hex().upper()
                     sensor_name = KNOWN_IDS.get(msg_id, f"trash_{msg_id}")
                     
- #                   if sensor_name.startswith("trash"): 
- #                       continue
-                    
                     decoded_data = {}
                     if status_icon in ["✅", "🔒"]:
-                        print(f"{status_icon} {raw_hex} [{ts}] [{sensor_name}]") # Comment to stop printing to terminal
+                    
+                        if TERMINAL_PRINT_ENABLED == "true":
+                            print(f"{status_icon} {raw_hex} [{ts}] [{sensor_name}]") # Comment to stop printing to terminal
                         
                         from src.decode.sensors import process_payload
                         decoded_data = process_payload(msg_id, frame)
                         
-                        for key, value in decoded_data.items(): #--------------------------- Comment to disable HA MQTT
-                            ha.publish_state(key, value)        #--------------------------- Comment to disable HA MQTT
+                        if MQTT_ENABLED == "true":
+                            for key, value in decoded_data.items():
+                                ha.publish_state(key, value)
                     
                     # Database Save Logic
                     if sensor_name == "IDU_CORE":
@@ -120,10 +148,12 @@ async def main():
                         current_state[5] = [msg_id] + list(frame[5:18])
                         
                         payload_ints = [byte for section in current_state for byte in section]
-#                        if len(payload_ints) == 84: #-------------------------------------- Comment to disable database
-#                            save_frame(list(payload_ints))#-------------------------------- Comment to disable database
-  #                          current_state = [[] for _ in range(6)]
-                    print(f"{current_state}") #------------------------------------ Comment to stop printing to terminal
+                        if DB_ENABLED == "true":
+                            if len(payload_ints) == 84:
+                                save_frame(list(payload_ints))
+                                
+                    if TERMINAL_PRINT_ENABLED == "true":
+                        print(f"{current_state}")
                         
         except Exception as e:
             print(f"❌ CONNECTION ERROR: {e}")
