@@ -1,4 +1,3 @@
-"""
 Midea S1S2 Bus Simulator
 ========================
 Replays LOW OUTPUT captured frames from a daily SQLite database over a 
@@ -32,4 +31,3 @@ Timing
   - Between cycles                 : actual timestamp delta from the DB,
                                      minus the time spent transmitting,
                                      clamped to [0, MAX_CYCLE_GAP_S]
-"""
