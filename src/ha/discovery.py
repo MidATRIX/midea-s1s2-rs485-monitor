@@ -84,6 +84,7 @@ class HAMQTT:
         # 0001_20
         self.register_sensor("Compressor_Actual_Hz", unit="Hz", state_class="measurement")
         self.register_sensor("T3_ODU_Coil_Temp", unit="°C", device_class="temperature")
+        self.register_sensor("T4_Base_Round_Down_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("T4_Base_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("T4_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("TP_Discharge_Temp", unit="°C", device_class="temperature")
