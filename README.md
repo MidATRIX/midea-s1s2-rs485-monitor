@@ -106,7 +106,7 @@ src/
 data/
 └── bus_noise.log            # Bytes that didn't match any known frame signature
 tools/
-└── simulator.py             # Simulates existing low output databases
+├── simulator.py             # Simulates existing low output databases
 └── sample.db                # Low output sample SQLite db
 ```
 
