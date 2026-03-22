@@ -27,11 +27,11 @@ def process_payload(msg_id, f):
         fan_map = {0x01: "High", 0x02: "Medium", 0x03: "Low", 0x06: "Boost", 0x0F: "Auto"}
         data["IDU_Blower_Speed"] = fan_map.get(raw_fan, f"Raw({raw_fan:02X})")
         
-        # IDU13:
-        data["T1_Room_Temp"] = (f[13] - 61) / 2 # if mode off or dry 61 else 66 / clearly not done
-        
+        # IDU13: -62 vs -61... -62 matches wall thermostat
+        data["T1_Room_Temp"] = (f[13] - 61) / 2
+                
         # IDU14:
-        data["T2_IDU_Coil_Temp"] = (f[14] - 61) / 2
+        data["T2_IDU_Coil_Temp"] = (f[14] - 62) / 2
         
         # IDU15:
         
@@ -51,11 +51,9 @@ def process_payload(msg_id, f):
         # ODU9:
         data["T3_ODU_Coil_Temp"] = (f[9] - 53) / 2
         
-        # ODU10 & 15: T4 Outdoor Ambient Temperature
-        # Base offset of -61. Byte 15 provides fractions (0, 64, 128, 192) = (0.0, 0.125, 0.25, 0.375)
-        base_temp_c = (f[10] - 61) / 2
-        fraction_c = f[15] / 512
-        data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
+        # ODU10: T4 Outdoor Ambient Temperature. Base offset of -62 (percision e.g. "10.5C".
+        base_temp_c = (f[10] * 0.375) - 17.78 # (f[10] * 0.36905) - 16.5
+        data["T4_Base_Outdoor_Temp"] = base_temp_c
         
         # ODU11:
         data["TP_Discharge_Temp"] = f[11] / 2
@@ -71,7 +69,9 @@ def process_payload(msg_id, f):
         modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry", 0x07: "Defrost"}
         data["ODU_Mode"] = modes.get(raw_odu_mode, f"Unknown({raw_odu_mode:02X})")
         
-        # ODU15: Outside temp 1/4 degree / still need to figure out the basics :(
+        # ODU15: Byte 15 provides fractions (0, 64, 128, 192) = (0.0, 0.125, 0.25, 0.375)
+        fraction_c = f[15] / 682.666
+        data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
         
         # ODU16:
         
@@ -139,7 +139,7 @@ def process_payload(msg_id, f):
         
         # HPB12: ticks every 60 active running mins
         # HPB13: ticks every 256 active running hours
-        data["Run_Hours_Clock"] = (f[13] * 256) + f[12]
+        data["Run_Lifetime_Hours"] = (f[13] * 256) + f[12]
         
         # HPB14:
         
