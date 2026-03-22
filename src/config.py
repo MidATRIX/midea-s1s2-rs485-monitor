@@ -1,9 +1,13 @@
 # src/config.py
 import os
 
-# --- NETWORK BRIDGE ---          # options to overide config setting while starting - useful for simulator
-WAVESHARE_IP = "192.168.86.185"   # --ip <ip_address> 
-WAVESHARE_PORT = 8888             # --port <port_number>
+# --- NETWORK BRIDGE ---                       # startup override flags
+WAVESHARE_IP = "192.168.86.185"                # --ip <ip_address> 
+WAVESHARE_PORT = 8888                          # --port <port_number>
+
+TERMINAL_PRINT_ENABLED = "true"
+MQTT_ENABLED = "false"
+DB_ENABLED = "false"
 
 # --- HOME ASSISTANT ---
 HA_HOST = "192.168.86.180"
@@ -14,14 +18,14 @@ MQTT_PORT_NUMBER = 1883
 MQTT_USER = "USERNAME"
 MQTT_PASS = "PASSWORD"
 
-# Root directory for shared telemetry / SQLite database
+# Root directory for low output telemetry / SQLite database
 SQLITE_DB_DIR = "data/"
 
 # --- DEVICE IDENTITY ---
 # Name used for Home Assistant device registry and MQTT topics.
 # Change this if you have multiple units or want a custom label.
 # Spaces are fine here — the code slugifies it where needed.
-DEVICE_NAME = "Testing Heat Pump"
+DEVICE_NAME = "Midea Heat Pump"
 
 # --- FILE PATHS ---
 # Using absolute paths based on the file location to prevent "File Not Found" errors
