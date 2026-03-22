@@ -51,6 +51,11 @@ Edit `src/config.py` before running:
 WAVESHARE_IP   = "192.168.x.x"
 WAVESHARE_PORT = 8888
 
+# Default to print to Terminal only
+TERMINAL_PRINT_ENABLED = "true"
+MQTT_ENABLED = "false"
+DB_ENABLED = "false"
+
 # Home Assistant MQTT broker
 MQTT_IP          = "192.168.x.x"
 MQTT_PORT_NUMBER = 1883
@@ -58,7 +63,14 @@ MQTT_USER        = "your_mqtt_username"
 MQTT_PASS        = "your_mqtt_password"
 
 # SQLite output directory
-SQLITE_DB_DIR = "/var/lib/midea_telemetry"
+SQLITE_DB_DIR = "data/"
+
+
+# --- DEVICE IDENTITY ---
+# Name used for Home Assistant device registry and MQTT topics.
+# Change this if you have multiple units or want a custom label.
+# Spaces are fine here — the code slugifies it where needed.
+DEVICE_NAME = "Testing Heat Pump"
 ```
 
 ---
@@ -93,6 +105,9 @@ src/
     └── db_handler.py        # SQLite frame logging with daily rotation
 data/
 └── bus_noise.log            # Bytes that didn't match any known frame signature
+tools/
+└── simulator.py             # Simulates existing low output databases
+└── sample.db                # Low output sample SQLite db
 ```
 
 ---
@@ -207,12 +222,12 @@ All byte indices are **frame-absolute** — byte 5 is the first payload byte and
 |------|-------------|---------|------|------------|-------|
 | 6 | `Compressor_Actual_Hz` | `raw` | Hz | ✅ | Real-time running frequency. Smooth ramp, confirmed 0–80 Hz observed |
 | 9 | `T3_ODU_Coil_Temp` | `(raw − 61) / 2` | °C | ⚠️ | Outdoor coil temperature. Goes strongly negative when iced (defrost trigger visible in data), unverified against a reference thermometer |
-| 10 | `T4_Outdoor_Temp` | `(raw − 61) / 2 + ODU15 / 512` | °C | ⚠️ | Outdoor ambient. Byte 10 gives 0.5°C steps, byte 15 (values 0/64/128/192) adds 0–0.375°C fractional precision. Unverified against reference thermometer |
+| 10 | `T4_Outdoor_Temp` | `(raw * 0.375) - 17.78` | °C | ⚠️ | Outdoor ambient. Byte 10 gives 0.5°C steps, byte 15 (values 0/64/128/192) adds 0–0.375°C fractional precision. Unverified against reference thermometer |
 | 11 | `TP_Discharge_Temp` | `raw / 2` | °C | ⚠️ | Compressor discharge line temperature |
 | 12 | `Compressor_Actual_Amps` | `raw / 3.2` | A | ⚠️ | Divisor confirmed from service manual (display shows floor(amps); 3.2A displays as "3"). ~6.6A at 57Hz, ~7.8A at 80Hz defrost. Unverified against clamp meter |
 | 13 | `ODU_Unknown_B13` | `raw` | — | ❓ | Narrow range (177–185), stable. Possibly resistance |
 | 14 | `ODU_Mode` | enum map | — | ✅ | 0x00=Off, 0x01=Cool, 0x02=Heat, 0x03=Fan, 0x04=Dry, 0x07=Defrost |
-| 15 | `T4_Fraction` | see T4 formula | — | ✅ | Quarter-degree fractional component of T4. Values observed: 0, 64, 128, 192 = 0.0, 0.125, 0.25, 0.375°C |
+| 15 | `T4_Fraction` | `fraction_c = raw / 682.667` | — | ✅ | Quarter-degree fractional component of T4. Values observed: 0, 64, 128, 192 = 0.0, 0.094, 0.188, 0.281°C |
 
 ---
 
@@ -291,7 +306,7 @@ The publisher uses send-on-change logic with a 60-second heartbeat to keep value
 
 Frames are logged to a daily-rotating SQLite database under `SQLITE_DB_DIR`.
 
-Each row captures a complete message cycle — one snapshot of all six decoded frame types — timestamped at the moment the cycle completes. Payload bytes are stored individually as named columns (`IDU5`–`IDU17`, `ODU5`–`ODU17`, etc.) for direct SQL querying.
+Each row captures a message cycle — one snapshot of all six decoded frame types — timestamped at the moment the cycle completes. Payload bytes are stored individually as named columns (`IDU5`–`IDU17`, `ODU5`–`ODU17`, etc.) for direct SQL querying.
 
 ---
 
