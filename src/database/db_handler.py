@@ -88,7 +88,8 @@ def save_frame(combined_payload):
             print(f"📂 Active Database: {new_path}")
 
         cursor = _conn.cursor()
-        ts_string = now.strftime('%Y-%m-%d %H:%M:%S')
+#        ts_string = now.strftime('%Y-%m-%d %H:%M:%S')
+        ts_string = now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
         columns = [
             "timestamp", 
