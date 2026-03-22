@@ -84,6 +84,7 @@ class HAMQTT:
         # 0001_20
         self.register_sensor("Compressor_Actual_Hz", unit="Hz", state_class="measurement")
         self.register_sensor("T3_ODU_Coil_Temp", unit="°C", device_class="temperature")
+        self.register_sensor("T4_Base_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("T4_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("TP_Discharge_Temp", unit="°C", device_class="temperature")
         self.register_sensor("Compressor_Actual_Amps", unit="A")
@@ -98,11 +99,11 @@ class HAMQTT:
         # 0001_51
         self.register_sensor("ODU_Fan_Speed_Target_RPM", unit="RPM")
         self.register_sensor("ODU_DC_Bus_Voltage_Target", unit="V", device_class="voltage")
-        self.register_sensor("Run_Minutes_Clock", unit="min", device_class="duration")
-        self.register_sensor("Run_Hours_Clock", unit="h", device_class="duration")
+        self.register_sensor("Run_Session_Minutes", unit="min", device_class="duration")
+        self.register_sensor("Run_Lifetime_Hours", unit="h", device_class="duration")
         # 0001_52
         self.register_sensor("IPM_Heatsink_Temp_1", unit="°C", device_class="temperature")
-        self.register_sensor("IPM_Heatsink_Temp_2", unit="°C", device_class="temperature")
+        self.register_sensor("IPM_Heatsink_Temp_1", unit="°C", device_class="temperature")
         self.register_sensor("Compressor_PID_Step", state_class="measurement")
         self.register_sensor("IPM_Phase_Current_A", unit="A", device_class="current")
         self.register_sensor("IPM_Phase_Current_B", unit="A", device_class="current")
