@@ -6,11 +6,10 @@ Replays LOW OUTPUT captured frames from a daily SQLite database over a
 TCP socket, reproducing the original bus timing as closely as possible.
 This means 6 frames every 3 seconds vs 24 frames every 3 seconds.
 
-Im considering captring high output non database frame feeds
-
 Usage
 -----
   python3 simulator.py <database.db> [HHMM]
+  python3 simulator.py sample.db 0321 - This will start a defrost cycle
 
   <database.db>   Path to a daily telemetry database
   [HHMM]          Optional start time (e.g. 1430 to start from 2:30 PM)
