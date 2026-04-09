@@ -1,4 +1,4 @@
-# midea-s1s2-rs485-monitor / Senville branded
+# midea-s1s2-rs485-monitor
 
 Reverse engineering and monitoring tools for the S1S2 communication bus used by Midea-based inverter HVAC systems (including Senville central air units).
 
