@@ -1,6 +1,6 @@
-# Midea / Senville S-Comms (S1S2) Monitor
+# midea-s1s2-rs485-monitor / Senville branded
 
-Reverse engineering and monitoring tools for the S-Comms (S1S2) communication bus used by Midea-based inverter HVAC systems (including Senville central air units).
+Reverse engineering and monitoring tools for the S1S2 communication bus used by Midea-based inverter HVAC systems (including Senville central air units).
 
 This project passively monitors and decodes the communication between the indoor air handler and outdoor inverter unit, exposing internal telemetry — compressor behavior, temperatures, voltages, EXV position, and more — and streams those metrics into Home Assistant via MQTT.
 
@@ -114,7 +114,7 @@ tools/
 
 ## Project Goals
 
-- Document the S-Comms (S1S2) protocol structure
+- Document the S1S2 protocol structure
 - Capture and analyze RS485 traffic
 - Validate CRC-16/MODBUS frame integrity
 - Identify sensor fields and scaling factors
@@ -327,7 +327,7 @@ Each row captures a message cycle — one snapshot of all six decoded frame type
 
 HVAC inverter systems may expose mains voltage on communication terminals depending on system design. Improper probing of HVAC control boards can result in serious injury, equipment damage, or voided warranties.
 
-This project was developed on a **central air unit where the indoor and outdoor units are on separate mains circuits**. This is why the S1/S2 bus on this system measures at **5V**. Many other Midea-based systems — particularly mini-splits where both units share a single power supply — run their S-Comms bus at much higher voltages and may present hazardous potentials on those same terminals.
+This project was developed on a **central air unit where the indoor and outdoor units are on separate mains circuits**. This is why the S1S2 bus on this system measures at **5V**. Many other Midea-based systems — particularly mini-splits where both units share a single power supply — run their S1S2 bus at much higher voltages and may present hazardous potentials on those same terminals.
 
 **Always measure bus voltage and verify electrical conditions before connecting any interface hardware.**
 
