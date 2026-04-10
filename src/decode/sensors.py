@@ -52,9 +52,9 @@ def process_payload(msg_id, f):
         data["T3_ODU_Coil_Temp"] = (f[9] - 53) / 2
         
         # ODU10: T4 Outdoor Ambient Temperature.
-        base_temp_c = (f[10] * .368) - 16.75
+        base_temp_c = (f[10] * .368) - 17.25
         data["T4_Base_Outdoor_Temp"] = base_temp_c
-        data["T4_Base_Round_Down_Outdoor_Temp"] = math.floor(base_temp_c) # This is how my thermostat reports to HA. Its ugly
+        data["T4_Base_Round_Down_Outdoor_Temp"] = math.floor(base_temp_c)
         
         # ODU11:
         data["TP_Discharge_Temp"] = f[11] / 2
