@@ -37,7 +37,7 @@ def process_payload(msg_id, f):
         
         # IDU16: Mode Flags (Bit 1 = Boost) / forgot about this
 
-        # IDU17:
+        # IDU17: I finally figured out the hidden bytes!!!
 
 
 
@@ -76,7 +76,7 @@ def process_payload(msg_id, f):
         
         # ODU16:
         
-        # ODU17:
+        # ODU17: I finally figured out the hidden bytes!!!
 
 
 
@@ -113,7 +113,7 @@ def process_payload(msg_id, f):
         # HPA16:
         data["IPM_Load_Index"] = f[16] # I no longer think this is amp average but it is a caculated number
         
-        # HPA17:
+        # HPA17: I finally figured out the hidden bytes!!!
         
 
 
