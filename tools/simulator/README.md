@@ -1,0 +1,33 @@
+Midea S1S2 Bus Simulator
+========================
+Replays LOW OUTPUT captured frames from a daily SQLite database over a 
+TCP socket, reproducing the original bus timing as closely as possible.
+This means 6 frames every 3 seconds vs 24 frames every 3 seconds.
+
+Usage
+-----
+ Must run in a seperate terminal window from main.py
+ 
+  python3 simulator.py <database.db> [HHMM]
+
+  <database.db>   Path to a daily telemetry database
+  [HHMM]          Optional start time (e.g. 1430 to start from 2:30 PM)
+
+  python3 simulator.py sample.db 0321 - This will start at a defrost cycle
+
+The simulator listens on localhost:5555 and waits for a client (e.g. main.py
+with --ip 127.0.0.1 --port 5555). Each time a client connects, it streams the
+full database from the requested start time, then waits for the next connection.
+
+Frame format
+------------
+All frames are emitted as clean LL+8 bytes with no trailing padding:
+  [A0][addr_hi][addr_lo][msg_id][LL][payload x LL][0x00][CRC_lo][CRC_hi]
+This matches the output of the new FrameBuffer which strips padding itself.
+
+Timing
+------
+  - Inter-frame gap within a cycle : FRAME_GAP_S  (default 0.10 s)
+  - Between cycles                 : actual timestamp delta from the DB,
+                                     minus the time spent transmitting,
+                                     clamped to [0, MAX_CYCLE_GAP_S]
