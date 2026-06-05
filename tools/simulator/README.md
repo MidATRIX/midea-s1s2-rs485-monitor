@@ -4,7 +4,7 @@ Replays LOW OUTPUT captured frames from a daily SQLite database over a
 TCP socket, reproducing the original bus timing as closely as possible.
 This means 6 frames every 3 seconds vs 24 frames every 3 seconds.
 
-Usage
+How To Run
 -----
  Must run in a seperate terminal window from main.py
  
@@ -18,6 +18,20 @@ Usage
 The simulator listens on localhost:5555 and waits for a client (e.g. main.py
 with --ip 127.0.0.1 --port 5555). Each time a client connects, it streams the
 full database from the requested start time, then waits for the next connection.
+
+Usage
+-----
+Option 1: 
+nc 127.0.0.1 5555 | xxd -p
+This option prints raw hex frames to the terminal.
+
+Option 2:
+nc 127.0.0.1 5555 | python3 s1s2_monitor.py -f
+This is a standalone python monitor script that does not require any pip installs that has a Matrix themed animation and displays sensor data.
+
+Option 3:
+main.py --ip 127.0.0.1 --port 5555
+This option is the my midea-s1s2-rs485-monitor app.
 
 Frame format
 ------------
