@@ -9,7 +9,8 @@ This means 6 frames every 3 seconds vs 24 frames every 3 seconds.
 Usage
 -----
   python3 simulator.py <database.db> [HHMM]
-  python3 simulator.py sample.db 0321 - This will start a defrost cycle
+  python3 simulator.py HeatModeSample.db 0321 - This will start a defrost cycle
+  python3 simulator.py CoolModeSample.db 1052 - This will start a 8hr cycle
 
   <database.db>   Path to a daily telemetry database
   [HHMM]          Optional start time (e.g. 1430 to start from 2:30 PM)
