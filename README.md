@@ -19,7 +19,7 @@ This project passively monitors and decodes the communication between the indoor
 ## Requirements
 
 - Python 3.10+
-- Waveshare RS485-to-Ethernet adapter (or equivalent RS485 bridge - ESP32 and RS485 to TTL board)
+- Waveshare RS485-to-Ethernet adapter (or equivalent RS485 bridge EX: ESP32 and RS485 to TTL board)
 - Passive tap on the S1/S2 communication lines
 - Home Assistant with an MQTT broker (optional)
 
