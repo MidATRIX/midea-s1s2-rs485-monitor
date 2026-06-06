@@ -1,13 +1,14 @@
 def process_payload(msg_id, f):
     data = {}
+    modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry", 0x07: "Defrost"}
+    fan_map = {0x01: "High", 0x02: "Medium", 0x03: "Low", 0x06: "Boost", 0x0F: "Auto"}
 
     if msg_id == "0100_20" and len(f) >= 20:
         
-        # IDU5
+        # IDU5:
         
         # IDU6:
         raw_idu_mode = f[6]
-        modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry"}
         data["IDU_Mode"] = modes.get(raw_idu_mode, f"Unknown({raw_idu_mode:02X})")
        
         # IDU7:
@@ -24,40 +25,49 @@ def process_payload(msg_id, f):
 
         # IDU12:
         raw_fan = f[12]
-        fan_map = {0x01: "High", 0x02: "Medium", 0x03: "Low", 0x06: "Boost", 0x0F: "Auto"}
         data["IDU_Blower_Speed"] = fan_map.get(raw_fan, f"Raw({raw_fan:02X})")
         
         # IDU13: -62 vs -61... -62 matches wall thermostat
-        data["T1_Room_Temp"] = (f[13] - 61) / 2
+        room_c = f[13]
+        if room_c > 113:
+            room_c -= 2
+        elif room_c > 110:
+            room_c -= 1
+        data["T1_Room_Temp"] = (room_c - 62) / 2
                 
-        # IDU14:
+        # IDU14: this seems nore accurate: data["T2_IDU_Coil_Temp"] = (f[14] - 56) / 2.25
         data["T2_IDU_Coil_Temp"] = (f[14] - 62) / 2
         
         # IDU15:
         
         # IDU16: Mode Flags (Bit 1 = Boost) / forgot about this
 
-        # IDU17: I finally figured out the hidden bytes!!!
+        # IDU17: IDU EXV Zone Cmd?
+        data[f"Raw_IDU17"] = f[17]
 
 
 
     elif msg_id == "0001_20" and len(f) >= 20:
+
+        # ODU5:
         
-        # ODU7: Actual Load
-        data["Compressor_Actual_Hz"] = f[6] # In defrost mode it got up to 80Hz
+        # ODU6:
+        data["Compressor_Actual_Hz"] = f[6] # In defrost mode it got up to 80Hz... ODU demand requested 80Hz
         
-        # ODU8:
+        # ODU7: assumed flags
+        
+        # ODU8: assumed flags
         
         # ODU9:
-        data["T3_ODU_Coil_Temp"] = (f[9] - 53) / 2
+        data["T3_ODU_Coil_Temp"] = (f[9] - 59) / 2
         
         # ODU10: T4 Outdoor Ambient Temperature.
-        base_temp_c = (f[10] * .368) - 17.25
+        base_temp_c = (f[10] * 0.36775) - 17.2
         data["T4_Base_Outdoor_Temp"] = base_temp_c
         data["T4_Base_Round_Down_Outdoor_Temp"] = math.floor(base_temp_c)
         
         # ODU11:
-        data["TP_Discharge_Temp"] = f[11] / 2
+        data["TP_Discharge_Temp"] = f[11] / 2 + 6
         
         # ODU12:
         data["Compressor_Actual_Amps"] = f[12] / 2
@@ -67,16 +77,17 @@ def process_payload(msg_id, f):
 
         # ODU14: ODU Mode
         raw_odu_mode = f[14]
-        modes = {0x00: "Off", 0x01: "Cool", 0x02: "Heat", 0x03: "Fan", 0x04: "Dry", 0x07: "Defrost"}
         data["ODU_Mode"] = modes.get(raw_odu_mode, f"Unknown({raw_odu_mode:02X})")
         
         # ODU15: Byte 15 provides base_temp_c fractions (0, 64, 128, 192) = (0%, 25%, 50%, 75%)
-        fraction_c = f[15] / 695.652
+        fraction_c = f[15] / 696.125
         data["T4_Outdoor_Temp"] = base_temp_c + fraction_c
         
         # ODU16:
         
-        # ODU17: I finally figured out the hidden bytes!!!
+        # ODU17: ODU confirmed/override EXV zone?
+        data[f"Raw_ODU17"] = f[17]
+       
 
 
 
@@ -113,8 +124,8 @@ def process_payload(msg_id, f):
         # HPA16:
         data["IPM_Load_Index"] = f[16] # I no longer think this is amp average but it is a caculated number
         
-        # HPA17: I finally figured out the hidden bytes!!!
-        
+        # HPA17: EXV step / stage?
+        data[f"Raw_HPA17"] = f[17]
 
 
 
@@ -144,7 +155,9 @@ def process_payload(msg_id, f):
         
         # HPB14:
         
-        # HPB15:
+        # HPB15: 157 to 93 ??? THIS CHANGED ONCE AND STAYED STATIC AFTERWARDS...
+        #                      I WAS OUT OF TOWN FOR THE WEEK AND CAME BACK TO A FULL SYSTEM FAILURE.
+        #                      SOMETHING EVEN CURROPTED MY DATABASE. MAYBE A DIRECT LIGHTNING STRIKE INDICATOR 👀
         
         # HPB16:
         
@@ -167,7 +180,7 @@ def process_payload(msg_id, f):
         
         # HPC9: Signed integer (Two's Complement)
         raw_delta = f[9]
-        data["Compressor_PID_Step"] = raw_delta if raw_delta <= 127 else raw_delta - 256 #
+        data["Compressor_PID_Step"] = raw_delta if raw_delta <= 127 else raw_delta - 256
         
         # HPC10:
         data["IPM_Phase_Current_A"] = f[10] # This is not PID_P_Error
@@ -199,7 +212,7 @@ def process_payload(msg_id, f):
         raw_phase_mod = f[6]
         data["Phase_Modifier"] = raw_phase_mod if raw_phase_mod <= 127 else raw_phase_mod - 256
         
-        # HPD7: 0-4 = Idle, 5-9 = Active Ramp
+        # HPD7: 
         data["Routine_Phase_Step"] = f[7]
         
         # HPD8: Triggered by Oil Return or High Load
