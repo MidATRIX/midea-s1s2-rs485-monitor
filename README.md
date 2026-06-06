@@ -350,6 +350,8 @@ If you're working with Midea or Senville inverter systems and have additional fr
 
 ![HA Sensors](images/2026-06-06_10-50-29.png)
 
+![HA Sensors](images/2026-06-06_10-50-55.png)
+
 ![HA Sensors](images/2026-06-06_10-51-11.png)
 
 ![HA Sensors](images/2026-06-06_10-51-29.png)
