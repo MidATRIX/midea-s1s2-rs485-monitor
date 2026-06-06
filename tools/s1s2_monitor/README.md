@@ -15,3 +15,9 @@ Defaults to a screensaver if no connection.
 If you would like to help me decode run this with the S1S2 simulator.
 
 Mostly created with AI.
+
+---
+
+## License
+
+[MIT License](LICENSE)
