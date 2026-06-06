@@ -1,0 +1,37 @@
+esphome:
+  name: midea-rs485-sniffer
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+    
+logger:
+  baud_rate: 115200
+
+external_components:
+  - source: github://oxan/esphome-stream-server
+
+wifi:
+  ssid: "SSID" 
+  password: "PASSWORD"
+  
+  manual_ip:
+    static_ip: 192.168.86.182
+    gateway: 192.168.86.1
+    subnet: 255.255.255.0
+
+# Configure the UART to sniff the S1/S2 bus
+uart:
+  id: s1s2_uart_bus
+  rx_pin: GPIO16
+  baud_rate: 4800
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  # Increasing buffer size prevents dropped frames on network lag
+  rx_buffer_size: 1024 
+
+stream_server:
+  uart_id: s1s2_uart_bus
+  port: 8888
