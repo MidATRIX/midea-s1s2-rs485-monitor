@@ -23,15 +23,15 @@ Usage
 -----
 Option 1: 
 nc 127.0.0.1 5555 | xxd -p
-This option prints raw hex frames to the terminal.
+- This option prints raw hex frames to the terminal.
 
 Option 2:
 nc 127.0.0.1 5555 | python3 s1s2_monitor.py -f
-This is a standalone python monitor script that does not require any pip installs that has a Matrix themed animation and displays sensor data.
+- This is a standalone python monitor script that does not require any pip installs that has a Matrix themed animation and displays sensor data to the terminal and animates using sensor data.
 
 Option 3:
 main.py --ip 127.0.0.1 --port 5555
-This option is the my midea-s1s2-rs485-monitor app.
+- This option is the midea-s1s2-rs485-monitor app. Make sure "nc 127.0.0.1 5555 | xxd -p" works first.
 
 Frame format
 ------------
