@@ -6,7 +6,7 @@ This project passively monitors and decodes the communication between the indoor
 
 > **Note:** This project is observation-only. It does not send commands or control the HVAC system.
 
-[Home Assistant Discussion Thread](https://community.home-assistant.io/t/reverse-engineering-senville-midea-scomms/992233?u=midatrix)
+[Home Assistant Discussion Thread](https://community.home-assistant.io/t/reverse-engineering-senville-midea-s1s2-bus/992233)
 
 ---
 
@@ -344,10 +344,22 @@ This project was developed on a **central air unit where the indoor and outdoor 
 
 ## Contributing
 
-If you're working with Midea or Senville inverter systems and have additional frame captures, sensor mappings, or scaling corrections, contributions are welcome. Open an issue or pull request.
+If you're working with Midea or Senville inverter systems and have additional frame captures, sensor mappings, or scaling corrections, contributions are welcome. Open an issue or [Home Assistant Discussion Thread](https://community.home-assistant.io/t/reverse-engineering-senville-midea-s1s2-bus/992233)
+
+---
+
+![HA Sensors](images/2026-06-06_10-50-29.png)
+
+![HA Sensors](images/2026-06-06_10-51-11.png)
+
+![HA Sensors](images/2026-06-06_10-51-29.png)
+
+![HA Sensors](images/2026-06-06_10-51-43.png)
+
+![HA Sensors](images/2026-06-06_10-51-56.png)
 
 ---
 
 ## License
 
-MIT License
+[MIT License](LICENSE)
