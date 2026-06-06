@@ -4,3 +4,5 @@
 - The result mimics my orignal Waveshare I had connected and documented in the main README.md.
 
 - Dont assume your S1S2 lines are 5V, GET A CERTIFIED ELECTRICAN TO TEST YOUR LINES.
+
+[MIT License](LICENSE)
