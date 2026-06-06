@@ -12,14 +12,14 @@ This project passively monitors and decodes the communication between the indoor
 
 ## Recommendations
 
-- Make sure the 2 lines you are connecting to are specifically labled S1S2 and 5V or less.
-- Before installing make sure you have hardware fully setup.
-- Make sure you can run "nc 127.0.0.1 5555 | xxd -p" and can find A00100 and A00001 frames.
+- Make sure the 2 lines you are connecting to are specifically labled S1S2 and 5V or less
+- Before installing make sure you have hardware fully setup
+- Make sure you can run "nc 127.0.0.1 5555 | xxd -p" and can find A00100 and A00001 frames
 
 ## Requirements
 
 - Python 3.10+
-- Waveshare RS485-to-Ethernet adapter (or equivalent RS485 bridge)
+- Waveshare RS485-to-Ethernet adapter (or equivalent RS485 bridge - ESP32 and RS485 to TTL board)
 - Passive tap on the S1/S2 communication lines
 - Home Assistant with an MQTT broker (optional)
 
