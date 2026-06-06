@@ -47,8 +47,4 @@ Timing
                                      clamped to [0, MAX_CYCLE_GAP_S]
 
 
----
-
-## License
-
 [MIT License](LICENSE)
