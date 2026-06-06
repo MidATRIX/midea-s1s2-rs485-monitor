@@ -45,3 +45,10 @@ Timing
   - Between cycles                 : actual timestamp delta from the DB,
                                      minus the time spent transmitting,
                                      clamped to [0, MAX_CYCLE_GAP_S]
+
+
+---
+
+## License
+
+[MIT License](LICENSE)
