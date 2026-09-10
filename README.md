@@ -14,7 +14,7 @@ This project passively monitors and decodes the communication between the indoor
 
 - Make sure the 2 lines you are connecting to are specifically labled S1S2 and 5V or less
 - Before installing make sure you have hardware fully setup
-- Make sure you can run "nc 127.0.0.1 5555 | xxd -p" and can find A00100 and A00001 frames
+- Make sure you can run "nc 'S1S2 Sniffer IP' 5555 | xxd -p" and can find A00100 and A00001 frames
 
 ## Requirements
 
