@@ -74,45 +74,70 @@ class HAMQTT:
     def register_all_sensors(self):
         """Registers all known sensors from the Master Dictionary."""
         print("Registering HA Sensors...")
-        # 0100_20
+        # ---------------------------------------------------------------
+        # Frame 0100_20 — IDU Core
+        # ---------------------------------------------------------------
         self.register_sensor("IDU_Mode")
-        self.register_sensor("IDU_Demand_Hz", unit="Hz", state_class="measurement")
+        self.register_sensor("IDU_Demand_Hz", unit="Hz", device_class="frequency")
+        self.register_sensor("0100_20_b8", state_class="measurement")
+        self.register_sensor("0100_20_b10", state_class="measurement")
         self.register_sensor("Target_Setpoint", unit="°C", device_class="temperature")
         self.register_sensor("IDU_Blower_Speed")
         self.register_sensor("T1_Room_Temp", unit="°C", device_class="temperature")
         self.register_sensor("T2_IDU_Coil_Temp", unit="°C", device_class="temperature")
-        # 0001_20
-        self.register_sensor("Compressor_Actual_Hz", unit="Hz", state_class="measurement")
+        self.register_sensor("IDU_Zone_Cmd", state_class="measurement")
+        
+        # ---------------------------------------------------------------
+        # Frame 0001_20 — ODU Core
+        # ---------------------------------------------------------------
+        self.register_sensor("Compressor_Actual_Hz", unit="Hz", device_class="frequency")
+        self.register_sensor("Compressor_Actual_Hz_Pct", unit="%", state_class="measurement")
         self.register_sensor("T3_ODU_Coil_Temp", unit="°C", device_class="temperature")
-        self.register_sensor("T4_Base_Round_Down_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("T4_Base_Outdoor_Temp", unit="°C", device_class="temperature")
-        self.register_sensor("T4_Outdoor_Temp", unit="°C", device_class="temperature")
         self.register_sensor("TP_Discharge_Temp", unit="°C", device_class="temperature")
-        self.register_sensor("Compressor_Actual_Amps", unit="A")
-        self.register_sensor("0001_20_b13", state_class="measurement")
-        self.register_sensor("ODU_Mode")
-        # 0001_50
-        self.register_sensor("ODU_Fan_Speed_Actual_RPM", unit="RPM")
-        self.register_sensor("ODU_DC_Bus_Voltage_Actual", unit="V", device_class="voltage")
+        self.register_sensor("Compressor_Actual_Amps", unit="A", device_class="current")
         self.register_sensor("AC_Input_Voltage_V", unit="V", device_class="voltage")
+        self.register_sensor("ODU_Mode")
+        self.register_sensor("T4_Outdoor_Temp", unit="°C", device_class="temperature")
+        self.register_sensor("ODU_Zone_Conf", state_class="measurement")
+        
+        # ---------------------------------------------------------------
+        # Frame 0001_50 — ODU Performance A (HPA)
+        # ---------------------------------------------------------------
+        self.register_sensor("ODU_Fan_Speed_Actual_RPM", unit="RPM")
+        self.register_sensor("EXV_Position_Steps", unit="steps", state_class="measurement")
+        self.register_sensor("EXV_Position_Pct", unit="%", state_class="measurement")
         self.register_sensor("Inverter_DC_Bus_Voltage_V", unit="V", device_class="voltage")
-        self.register_sensor("IPM_Load_Index", state_class="measurement")
-        # 0001_51
+        self.register_sensor("0001_50_b15", unit="°C", device_class="temperature")
+        self.register_sensor("Compressor_Fine_Hz_Int", state_class="measurement")
+        self.register_sensor("Compressor_Fine_Hz_Frac", state_class="measurement")
+        self.register_sensor("Compressor_Actual_Hz_Fine", unit="Hz", device_class="frequency")
+        
+        # ---------------------------------------------------------------
+        # Frame 0001_51 — ODU Performance B (HPB)
+        # ---------------------------------------------------------------
         self.register_sensor("ODU_Fan_Speed_Target_RPM", unit="RPM")
-        self.register_sensor("ODU_DC_Bus_Voltage_Target", unit="V", device_class="voltage")
+        self.register_sensor("EXV_Position_Target_Step", unit="steps", state_class="measurement")
         self.register_sensor("Run_Session_Minutes", unit="min", device_class="duration")
-        self.register_sensor("Run_Lifetime_Hours", unit="h", device_class="duration")
-        # 0001_52
-        self.register_sensor("IPM_Heatsink_Temp_1", unit="°C", device_class="temperature")
-        self.register_sensor("IPM_Heatsink_Temp_2", unit="°C", device_class="temperature")
+        self.register_sensor("Run_Lifetime_Hours", unit="h", device_class="duration", state_class="total_increasing")
+        
+        # ---------------------------------------------------------------
+        # Frame 0001_52 — ODU Performance C (HPC)
+        # ---------------------------------------------------------------
+        self.register_sensor("0001_52_b7", state_class="measurement")
+        self.register_sensor("0001_52_b8", state_class="measurement")
         self.register_sensor("Compressor_PID_Step", state_class="measurement")
-        self.register_sensor("IPM_Phase_Current_A", unit="A", device_class="current")
-        self.register_sensor("IPM_Phase_Current_B", unit="A", device_class="current")
-        self.register_sensor("ODU_Fan_Speed_Step", state_class="measurement")
-        # 0001_53
-        self.register_sensor("Phase_Modifier", state_class="measurement")
-        self.register_sensor("Routine_Phase_Step", state_class="measurement")
-        self.register_sensor("Active_Ramp_Routine")
-        self.register_sensor("EXV_Position_Steps", state_class="measurement")
-        self.register_sensor("ODU_Target_Hz", unit="Hz", state_class="measurement")
+        self.register_sensor("0001_52_b10", state_class="measurement")
+        self.register_sensor("0001_52_b11", state_class="measurement")
+        self.register_sensor("0001_52_b13", state_class="measurement")
+        
+        # ---------------------------------------------------------------
+        # Frame 0001_53 — ODU Performance D (HPD)
+        # ---------------------------------------------------------------
+        self.register_sensor("Drive_Comp_Index", state_class="measurement")
+        self.register_sensor("Cycle_Stage", state_class="measurement")
+        self.register_sensor("DC_Stage", state_class="measurement")
+        self.register_sensor("Compressor_State", state_class="measurement")
+        self.register_sensor("Total_Power", unit="W", device_class="power", state_class="measurement")
+        self.register_sensor("ODU_Target_Hz", unit="Hz", device_class="frequency")
         
