@@ -1,0 +1,168 @@
+# midea-s1s2-rs485-monitor — ESPHome passive sniffer
+#
+# Hardware: ESP32 + RS485 transceiver (MAX3485/SP3485 class, 3.3 V).
+#   - Transceiver A/B -> S1/S2 (MEASURE BUS VOLTAGE FIRST — 5 V on separate-
+#     supply central air; mini-splits can be much higher!)
+#   - DE and /RE tied to GND -> permanent receive, we never transmit
+#   - RO -> the rx_pin below. DI unconnected.
+#   - ESP is wall-powered; do NOT bond ESP ground to the control board.
+#
+# requirements: pip install esphome
+# Flash:  esphome run example_midea_s1s2.yaml
+#
+# HA integration is the native API (no MQTT discovery). The mqtt block below
+# exists ONLY to carry the raw frame for Telegraf/InfluxDB
+# discovery is off so HA doesn't double-register the device.
+
+esphome:
+  name: midea-s1s2
+  friendly_name: S1S2         # This + sensor names adds to Home Assistant
+                              # I prefer to keep this short
+
+esp32:
+  board: <your data>
+  framework:
+    type: arduino
+
+logger:
+#  baud_rate: 0               # keep hardware UART free; logs go over USB/API
+
+wifi:
+  ssid: <your data>
+  password: <your data>
+  manual_ip:
+    static_ip: <your data>
+    gateway: <your data>
+    subnet: <your data>
+  ap:
+    ssid: "midea-s1s2"
+    password: <your data>
+
+captive_portal:
+
+api:                          # Home Assistant native API — this IS discovery
+
+ota:
+  - platform: esphome
+
+# Optional on-device page at http://midea-s1s2.local
+web_server:
+  port: 80
+
+mqtt:
+  broker: <your data>
+  username: <your data>
+  password: <your data>
+  discovery: false            # IMPORTANT: prevents duplicate device in HA
+
+external_components:
+  - source: components        # local checkout; later: github://MidATRIX/midea-s1s2-rs485-monitor
+
+uart:
+  id: s1s2_uart
+  rx_pin: GPIO16
+  baud_rate: 4800
+  rx_buffer_size: 1024        # full 24-frame cycle is ~480 bytes; don't starve it
+
+midea_s1s2:
+  uart_id: s1s2_uart
+  raw_topic_prefix: midea_s1s2/frames   # -> midea_s1s2/frames/0001_20 etc.
+                                        # remove this line to disable raw publishing
+
+# ---------------------------------------------------------------------
+# Sensors. Keys map to bytes/formulas in components/midea_s1s2/midea_s1s2.cpp
+# Code = Midea service-manual parameter code where one exists.
+# ---------------------------------------------------------------------
+sensor:
+  - platform: midea_s1s2
+
+    # -- 0100_20 IDU core ------------------------------------------------
+    indoor_setpoint:                          # TT  IDU11
+      name: Indoor setpoint
+    indoor_ambient_temperature:               # T1  IDU13
+      name: Indoor ambient temperature
+    indoor_coil_temperature:                  # T2  IDU14
+      name: Indoor coil temperature
+    compressor_frequency_indoor_target:       # oT  IDU7
+      name: Compressor frequency (indoor target)
+    indoor_zone_command:                      # —   IDU17
+      name: Indoor zone command
+
+    # -- 0001_20 ODU core ------------------------------------------------
+    compressor_frequency_actual_int:          # Fr  ODU6
+      name: Compressor frequency (actual)
+    outdoor_coil_temperature:                 # T3  ODU9
+      name: Outdoor coil temperature
+    outdoor_ambient_temperature:              # T4  ODU10+15
+      name: Outdoor ambient temperature
+    discharge_temperature:                    # TP  ODU11
+      name: Discharge temperature
+    current_draw:                             # dL  ODU12
+      name: Current draw
+    input_voltage:                            # Ac  ODU13 — RAW, unverified
+      name: Input voltage (raw)
+    outdoor_zone_confirmed:                   # —   ODU17
+      name: Outdoor zone confirmed
+
+    # -- 0001_50 HPA -------------------------------------------------------
+    outdoor_fan_speed_actual:                 # —   HPA11
+      name: Outdoor fan speed (actual)
+    eev_steps:                                # Lr  HPA12
+      name: EEV steps
+    dc_bus_voltage:                           # Uo  HPA14
+      name: DC bus voltage
+    compressor_frequency_actual_avg:          # —   HPA16+17, ~10 s average
+      name: Compressor frequency (avg)
+
+    # -- 0001_51 HPB -------------------------------------------------------
+    outdoor_fan_speed_target:                 # —   HPB5
+      name: Outdoor fan speed (target)
+    eev_steps_target:                         # —   HPB6
+      name: EEV steps (target)
+    run_session_minutes:                      # —   HPB11
+      name: Run session minutes
+    run_lifetime_hours:                       # —   HPB12+13
+      name: Run lifetime hours
+
+    # -- 0001_52 HPC -------------------------------------------------------
+    compressor_pid_step:                      # —   HPC9
+      name: Compressor PID step
+    outdoor_fan_speed_step:                   #  HPC13
+      name: Outdoor fan speed step
+
+    # -- 0001_53 HPD -------------------------------------------------------
+    drive_comp_index:                         # —   HPD6
+      name: Drive comp index
+    cycle_stage:                              # —   HPD7
+      name: Cycle stage
+    dc_stage:                                 # —   HPD8
+      name: DC stage
+    compressor_state:                         # —   HPD9
+      name: Compressor state
+    total_power:                              # —   HPD11+12, assumed W
+      name: Total power
+    compressor_frequency_outdoor_target:      # FT  HPD13
+      name: Compressor frequency (outdoor target)
+
+    # -- component health --------------------------------------------------
+    crc_errors:
+      name: CRC errors
+
+    # -- undecoded bytes under investigation (uncomment what you're chasing;
+    #    each one publishes per-frame and adds up in HA's recorder) --------
+#    unknown_0100_20_b8: { name: "Raw 0100_20[8]" }     # soft-start flag?
+#    unknown_0100_20_b10: { name: "Raw 0100_20[10]" }
+#    unknown_0001_50_b15_temperature: { name: "HPA15 temperature (?)" }
+#    unknown_0001_52_b7: { name: "Raw 0001_52[7]" }
+#    unknown_0001_52_b8: { name: "Raw 0001_52[8]" }
+#    unknown_0001_52_b10: { name: "Raw 0001_52[10]" }
+#    unknown_0001_52_b11: { name: "Raw 0001_52[11]" }
+
+text_sensor:
+  - platform: midea_s1s2
+    indoor_mode:                              # IDU6
+      name: Indoor mode
+    indoor_blower_speed:                      # IDU12 — mode, not RPM
+      name: Indoor blower speed
+    outdoor_mode:                             # ODU14 — shows Defrost
+      name: Outdoor mode
