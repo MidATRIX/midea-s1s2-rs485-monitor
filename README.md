@@ -1,182 +1,124 @@
-# midea-s1s2-rs485-monitor
+# Midea S1/S2 Bus Protocol
 
-Reverse engineering and monitoring tools for the S1S2 communication bus used by Midea-based inverter HVAC systems (including Senville central air units).
+**A reverse-engineered reference for the RS-485 S1/S2 bus between a Midea indoor unit and its outdoor inverter unit — plus an ESPHome component that passively decodes it into Home Assistant.**
 
-This project passively monitors and decodes the communication between the indoor air handler and outdoor inverter unit, exposing internal telemetry — compressor behavior, temperatures, voltages, EXV position, and more — and streams those metrics into Home Assistant via MQTT.
+The outdoor unit (ODU) is the bus master. It continuously exchanges frames with the indoor unit (IDU), and those frames carry the whole inverter conversation: compressor frequency, temperatures, current, EXV position, fan speeds, runtime and protection state. An [ESPHome](https://esphome.io/) component on a single ESP32 listens to the bus **read-only**, decodes both sides, and publishes to Home Assistant over the native API — while streaming every raw frame to MQTT for archiving and byte-level work.
 
-> **Note:** This project is observation-only. It does not send commands or control the HVAC system.
+> [!NOTE]
+> Unofficial and not affiliated with Midea. Everything here was measured on the system described below. Each field carries a confidence tag — treat anything not tagged ✅ as a lead, not a fact. This project is **observation-only**: it never transmits on the bus.
 
-[Home Assistant Discussion Thread](https://community.home-assistant.io/t/reverse-engineering-senville-midea-s1s2-bus/992233)
+> [!WARNING]
+> **Measure S1/S2 bus voltage before connecting anything.** On this system, where the IDU and ODU have **separate mains supplies**, S1/S2 is a ~5 V signalling pair. Many mini-splits that **share a supply** run this bus at far higher, hazardous potentials on the same terminals. Never assume — measure on your own unit, every time.
 
----
-
-## Recommendations
-
-- Make sure the 2 lines you are connecting to are specifically labled S1S2 and 5V or less
-- Before installing make sure you have hardware fully setup
-- Make sure you can run "nc 'S1S2 Sniffer IP' 5555 | xxd -p" and can find A00100 and A00001 frames
-
-## Requirements
-
-- Python 3.10+
-- Waveshare RS485-to-Ethernet adapter (or equivalent RS485 bridge EX: ESP32 and RS485 to TTL board)
-- Passive tap on the S1/S2 communication lines
-- Home Assistant with an MQTT broker (optional)
-
-Install Python dependencies inside a virtual environment:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate        # Linux / macOS
-# venv\Scripts\activate         # Windows
-
-pip install -r requirements.txt
-```
+**Tested on:** Senville (Midea OEM) 3-ton central/ducted inverter heat pump.
 
 ---
 
-## Configuration
+## Contents
 
-```
-IDU ──────── S1/S2 ──────── ODU
-               │
-          Hardware
-          Waveshare RS485-ETH
-               │
-          TCP :8888
-               │
-          This script
-               │
-          SQLite
-          MQTT → Home Assistant
-```
-
-Edit `src/config.py` before running:
-
-```python
-# Network bridge IP/port (Waveshare adapter)
-WAVESHARE_IP   = "192.168.x.x"
-WAVESHARE_PORT = 8888
-
-# Default to print to Terminal only
-TERMINAL_PRINT_ENABLED = "true"
-MQTT_ENABLED = "false"
-DB_ENABLED = "false"
-
-# Home Assistant MQTT broker
-MQTT_IP          = "192.168.x.x"
-MQTT_PORT_NUMBER = 1883
-MQTT_USER        = "your_mqtt_username"
-MQTT_PASS        = "your_mqtt_password"
-
-# SQLite output directory
-SQLITE_DB_DIR = "data/"
-
-
-# --- DEVICE IDENTITY ---
-# Name used for Home Assistant device registry and MQTT topics.
-# Change this if you have multiple units or want a custom label.
-# Spaces are fine here — the code slugifies it where needed.
-DEVICE_NAME = "Testing Heat Pump"
-```
-
----
- 
-## How to Run
- 
-```bash
-# From the project root
-PYTHONPATH=src ./venv/bin/python3 -m src.main
-
-# Override connection target (e.g. for simulator testing)
-PYTHONPATH=src ./venv/bin/python3 -m src.main --ip 127.0.0.1 --port 5555
-```
- 
----
-
-## Project Structure
-
-```
-src/
-├── main.py                  # Main event loop — TCP connection, frame dispatch
-├── config.py                # All user configuration (IPs, credentials, paths)
-├── serial/
-│   └── frame_buffer.py      # RS485 byte stream → validated frame slices
-├── protocol/
-│   └── validator.py         # CRC-16/MODBUS frame validation
-├── decode/
-│   └── sensors.py           # Frame payload → decoded sensor values
-├── ha/
-│   └── discovery.py         # Home Assistant MQTT discovery + state publishing
-└── database/
-    └── db_handler.py        # SQLite frame logging with daily rotation
-data/
-└── bus_noise.log            # Bytes that didn't match any known frame signature
-tools/
-├── simulator.py             # Simulates existing low output databases
-└── sample.db                # Low output sample SQLite db
-```
+1. [At a glance](#at-a-glance)
+2. [Physical layer](#1-physical-layer)
+3. [Frame format and integrity](#2-frame-format-and-integrity)
+4. [Who talks when](#3-who-talks-when)
+5. [Frame catalogue](#4-frame-catalogue)
+6. [Field maps (every byte)](#5-field-maps)
+7. [Hardware](#6-hardware)
+8. [Installation (ESPHome)](#7-installation-esphome)
+9. [Archiving & dashboards](#8-archiving--dashboards)
+10. [Method, sources and confidence](#9-method-sources-and-confidence)
+11. [Related projects](#related-projects)
 
 ---
 
-## Project Goals
+## At a glance
 
-- Document the S1S2 protocol structure
-- Capture and analyze RS485 traffic
-- Validate CRC-16/MODBUS frame integrity
-- Identify sensor fields and scaling factors
-- Monitor real inverter performance metrics
-- Integrate telemetry into Home Assistant
-
----
-
-
-## Protocol Specification
-
-### Bus Parameters
-
-| Parameter | Value |
+| | |
 |---|---|
-| Baud Rate | 4800 |
-| Data Bits | 8 |
-| Parity | None |
-| Stop Bits | 1 |
-| Interface | RS485 half-duplex |
+| **Wires** | 2 (S1, S2), RS-485 differential pair |
+| **Bus voltage** | ~5 V on this unit (separate-supply central air) — **varies, measure first** |
+| **Line settings** | 4800 baud, 8 data bits, no parity, 1 stop bit |
+| **Bus master** | Outdoor unit (ODU) |
+| **Slave** | Indoor unit (IDU); responds when polled |
+| **Frame marker** | `0xA0` preamble, length-prefixed, CRC-16/MODBUS |
+| **Cycle** | 24 frames, ~3.6 s |
+| **Data frames** | `20` (core, both sides) + `50`–`53` (ODU performance) |
+| **This monitor** | ESP32 + RS-485-TTL, read-only; ESPHome → Home Assistant + raw frames → MQTT |
 
-### Frame Structure (A0 frames)
+---
+
+## 1. Physical layer
+
+- **Two conductors**, S1 and S2 — the RS-485 differential pair. No ground runs with them.
+- **4800 baud, 8N1**, half-duplex.
+- **The ODU is master.** It drives the cycle and polls the IDU; the IDU answers when addressed. This monitor is a **passive third party** and never transmits — only the RS-485 module's `RXD` is wired, `TXD` is left unconnected.
+- **Bus voltage varies by topology.** Separate IDU/ODU supplies → low-voltage pair (~5 V here). Shared supply → potentially mains-level. Measure before tapping.
+
+---
+
+## 2. Frame format and integrity
+
+### Frame structure
 
 ```
-[A0] [DD DD] [CC] [LL] [ ... PAYLOAD ... ] [B17] [CR CR]
-  0    1  2    3    4     5 .. LL+4         LL+5  LL+6 LL+7
+[A0] [DD DD] [CC] [LL] [ ... payload (LL bytes) ... ] [B17] [CRC CRC]
+  0    1   2   3    4     5 .. LL+4                     LL+5   LL+6 LL+7
 ```
- 
+
 | Bytes | Field | Notes |
 |---|---|---|
-| 0 | Header | `0xA0` |
-| 1–2 | Device address | `0x0001` = ODU, `0x0100` = IDU |
-| 3 | Message ID | `0x20`, `0x50`–`0x53`, etc. |
-| 4 | Payload length `LL` | Number of payload data bytes that follow |
-| 5..LL+4 | Payload | Sensor data (`LL` bytes) |
-| LL+5 | Pre-CRC byte | Part of the frame, covered by CRC. `0x00` in most frames. In the HPA frame (`0001_50`) this byte carries real sensor data — see T5 suction temp below. |
-| LL+6–LL+7 | CRC | CRC-16/MODBUS, little-endian 
+| 0 | Preamble | `0xA0` |
+| 1–2 | Device address | `0x0001` = ODU (from outdoor), `0x0100` = IDU (from indoor) |
+| 3 | Message type | `0x20`, `0x50`–`0x53`, `0x21`, `0x91` |
+| 4 | Payload length `LL` | number of payload bytes that follow |
+| 5 .. LL+4 | Payload | sensor data; byte indices in this doc are **frame-absolute** (byte 5 = first payload byte) |
+| LL+5 | Pre-CRC byte (“B17”) | part of the frame, covered by CRC |
+| LL+6–LL+7 | CRC | CRC-16/MODBUS, little-endian |
 
-> **Frame validation:** The CRC covers every byte from `0xA0` through `B17` inclusive. Any frame that fails CRC is discarded and the offending bytes are logged to `data/bus_noise.log`.
+Byte indices match the capture/database column names: `ODU6` = byte 6 of an ODU frame, `HPA15` = byte 15 of the `0001_50` frame, and so on.
 
+### Checksum — CRC-16/MODBUS
 
-### Checksum
+Polynomial `0xA001` (reflected), initial `0xFFFF`, computed over every byte from the preamble through the pre-CRC byte, appended little-endian.
 
-| Parameter | Value |
-|---|---|
-| Algorithm | CRC-16/MODBUS |
-| Polynomial (reflected) | `0xA001` |
-| Initial value | `0xFFFF` |
-| Bit order | LSB-first (reflected) |
-| Output | 2 bytes, little-endian |
+```python
+def crc16_modbus(data):            # data = bytes 0 .. LL+5 inclusive
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc                      # append crc & 0xFF, then crc >> 8
+```
 
-### Message Cycle
+Any frame that fails CRC is discarded. The ESPHome component counts CRC failures as a diagnostic sensor so a wiring or noise problem is visible.
 
-The ODU is bus master. A full cycle is 24 frames and takes approximately 3.6 seconds:
- 
+### Example captures
+
+```
+ODU (0001) ID:20  A00001200C120F000077742604B5010001001D51
+IDU (0100) ID:20  A00100200C11010F000000170F6C60190000E7B400
+```
+
+---
+
+## 3. Who talks when
+
+The ODU drives a repeating **24-frame cycle (~3.6 s)**. The core `20` frames appear every cycle from both sides; the performance frames `50`–`53` rotate one per cycle; `21` and `91` are handshake and keepalive.
+
+```mermaid
+sequenceDiagram
+    participant ODU as Outdoor unit (master)
+    participant IDU as Indoor unit
+    ODU->>IDU: 0001_20 core (×6 per cycle)
+    IDU-->>ODU: 0100_20 core
+    ODU->>IDU: 0001_50 (HPA) — fan, EEV, DC bus, fine Hz
+    ODU->>IDU: 0001_51 (HPB) — targets, runtime
+    ODU->>IDU: 0001_52 (HPC) — PID step, fan step
+    ODU->>IDU: 0001_53 (HPD) — state, power, target Hz
+    Note over ODU,IDU: 50–53 rotate one per cycle
+    ODU-)IDU: 0001_21 handshake (0x7F), 0001_91 keepalive (zeros)
+```
+
 ```
 ODU 20 → IDU 20 → ODU 21 → IDU 21 →
 ODU 20 → IDU 20 → ODU 50 → IDU 50 →
@@ -185,183 +127,241 @@ ODU 20 → IDU 20 → ODU 52 → IDU 52 →
 ODU 20 → IDU 20 → ODU 53 → IDU 53 →
 ODU 20 → IDU 20 → ODU 91 → IDU 91
 ```
- 
-- Frame `20` appears every cycle and carries core telemetry from both units.
+
+- Frame `20` carries core telemetry from both units, every cycle.
 - Frames `50`–`53` rotate one per cycle, carrying extended ODU diagnostics.
-- Frame `21` carries a single handshake/capability byte (`0x7F` on both sides). Payload is otherwise zero.
-- Frame `91` is a keepalive heartbeat. Both ODU and IDU send all-zero payloads.
-- IDU responses to `50`–`53` and `91` are acknowledgements only — their payloads are all zeros. The ODU is the sole source of data in those exchanges.
+- Frame `21` is a handshake (`0x7F` both sides, otherwise zero).
+- Frame `91` is an all-zero keepalive.
+- IDU replies to `50`–`53` and `91` are acknowledgements only — all-zero payloads. **The ODU is the sole data source in those exchanges.**
 
-### Example Captures
+The ESPHome component records the six data frames (`0100_20`, `0001_20`, `0001_50`–`53`) and drops the `21` handshake and `91` keepalive.
+
+---
+
+## 4. Frame catalogue
+
+| Frame | From | Carries |
+|---|---|---|
+| `0100_20` | IDU | mode, demand Hz, setpoint, blower, indoor temps, EEV zone |
+| `0001_20` | ODU | compressor Hz, outdoor temps, current, mode, EEV zone confirm |
+| `0001_50` (HPA) | ODU | outdoor fan RPM, EEV steps, DC bus voltage, fine/avg Hz, IPM-temp candidate |
+| `0001_51` (HPB) | ODU | fan/EEV targets, run-session minutes, lifetime hours |
+| `0001_52` (HPC) | ODU | PID step, fan gear index, inverter bytes |
+| `0001_53` (HPD) | ODU | compressor state, cycle stage, total power, target Hz |
+| `0001_21` | ODU/IDU | handshake `0x7F` |
+| `0001_91` | ODU/IDU | keepalive (zeros) |
+
+---
+
+## 5. Field maps
+
+**Tags:** ✅ confirmed (physically verified or exact match to a confirmed field) · ⚠️ probable (formula fits, physically plausible, not ground-truthed) · ❔ unknown (captured, meaning not decoded).
+
+Temperatures use an NTC thermistor curve unless noted; the discharge sensor uses a Steinhart–Hart curve. Both are in [section 8](#8-installation-esphome) / the component source.
 
 ```
-13:51:42.853  ODU (0001)  ID:20  A00001200C120F000077742604B5010001001D51
-13:51:42.946  IDU (0100)  ID:20  A00100200C11010F000000170F6C60190000E7B400
+ntc_temp(v)   = 1 / (1/298.15 + ln(0.81·(255−v)/v) / 4150) − 273.15
+stein_temp(v) = 1 / (2.873e-3 + 2.491e-4·L + 9.74e-7·L³) − 273.15,  L = ln((255−v)/v)
 ```
 
-## Sensor Reference
+<details>
+<summary><b>0100_20 — IDU core</b> (IDU → ODU)</summary>
 
-All byte indices are **frame-absolute** — byte 5 is the first payload byte and matches the DB column names (`HPA5`, `ODU5`, etc.). Byte 17 is the pre-CRC byte stored as `HPA17`, `ODU17`, etc.
+| Byte | Name | Decode | Unit | Tag |
+|---|---|---|---|---|
+| 5 | constant `0x11` | — | — | |
+| 6 | `indoor_mode` | enum (see below) | — | ✅ |
+| 7 | `compressor_frequency_indoor_target` (oT) | raw | Hz | ⚠️ |
+| 8 | unknown — soft-start flag `0x80`? | raw | — | ❔ |
+| 10 | unknown | raw | — | ❔ |
+| 11 | `indoor_setpoint` (TT) | raw | °C | ✅ |
+| 12 | `indoor_blower_speed` | enum (see below) | — | ⚠️ |
+| 13 | `indoor_ambient_temperature` (T1) | `ntc_temp(raw)` | °C | ✅ |
+| 14 | `indoor_coil_temperature` (T2) | `ntc_temp(raw)` | °C | ⚠️ |
+| 15 | constant `0x19` | — | — | |
+| 17 | `indoor_zone_command` | raw {0,20,40,60,80} | — | ⚠️ |
 
-### Confidence Levels
-- ✅ **Confirmed** — Validated against physical measurements or unambiguous observed behaviour
-- ⚠️ **Probable** — Formula fits data well, physically plausible, not yet ground-truthed
-- ❓ **Unknown** — Captured but meaning not yet decoded
+**Mode:** `0x00` Off · `0x01` Cool · `0x02` Heat · `0x03` Fan · `0x04` Dry · `0x06` Forced Cool · `0x07` Defrost/Self-Clean · `0x09` ECO · `0x0A` Forced Defrost.
+**Blower (commanded mode, not RPM):** `0x01` High · `0x02` Medium · `0x03` Low · `0x06` Boost · `0x0F` Auto. S1/S2 carries no measured indoor blower RPM.
+</details>
 
----
+<details>
+<summary><b>0001_20 — ODU core</b> (ODU → IDU)</summary>
 
-### Frame `0100_20` — IDU Core (Indoor Unit → ODU)
+| Byte | Name | Decode | Unit | Tag |
+|---|---|---|---|---|
+| 6 | `compressor_frequency_actual_int` (Fr) | raw | Hz | ⚠️ |
+| 9 | `outdoor_coil_temperature` (T3) | `ntc_temp(raw)` | °C | ✅ |
+| 10 | `outdoor_ambient_temperature` (T4) | `ntc_temp(b10 + b15/256)` | °C | ✅ |
+| 11 | `discharge_temperature` (TP) | `stein_temp(raw)` | °C | ⚠️ |
+| 12 | `current_draw` (dL) | `raw / 1.875` | A | ⚠️ |
+| 13 | `input_voltage` (Ac) | raw (uncalibrated) | — | ❔ |
+| 14 | `outdoor_mode` | enum (shows Defrost) | — | ✅ |
+| 15 | T4 fractional part | quarter-degree {0,64,128,192}, folds into byte 10 | — | ✅ |
+| 16 | constant `0x01` | — | — | |
+| 17 | `outdoor_zone_confirmed` | raw; can override IDU byte 17 | — | ⚠️ |
+</details>
 
-| Byte | Sensor Name | Formula | Unit | Confidence | Notes |
-|------|-------------|---------|------|------------|-------|
-| 6 | `IDU_Mode` | enum map | — | ✅ | 0x00=Off, 0x01=Cool, 0x02=Heat, 0x03=Fan, 0x04=Dry |
-| 7 | `IDU_Demand_Hz` | `raw` | Hz | ✅ | IDU's requested compressor frequency. Proportional to (T1_room − setpoint) delta. Confirmed range 0–96 Hz |
-| 11 | `Target_Setpoint` | `raw` | °C | ✅ | User setpoint in °C, no offset or scaling needed |
-| 12 | `IDU_Blower_Speed` | enum map | — | ✅ | 0x01=High, 0x02=Medium, 0x03=Low, 0x06=Boost, 0x0F=Auto |
-| 13 | `T1_Room_Temp` | `(raw − 62) / 2 if > 110 + 1 if > 113 + 2` | °C | ⚠️ | Indoor ambient temperature, unverified against a reference thermometer |
-| 14 | `T2_IDU_Coil_Temp` | `(raw − 61) / 2` | °C | ⚠️ | Indoor evaporator/condenser coil temperature, unverified against a reference thermometer |
-| 17 | `IDU_EEV_Zone_Cmd` | `raw` | — | ⚠️ | 0 = standard mode / ODU-control, 40 = IDU-control efficiency Low zone, 80 = IDU-control efficiency Medium zone... / IDU asserts this after assessing thermal stability / ODU17 mirrors one frame later |
+<details>
+<summary><b>0001_50 — ODU Performance A (HPA)</b> (ODU → IDU)</summary>
 
----
+| Byte | Name | Decode | Unit | Tag |
+|---|---|---|---|---|
+| 5–10 | constant `0x00` | — | — | |
+| 11 | `outdoor_fan_speed_actual` | `raw × 8` | RPM | ✅ |
+| 12 | `eev_steps` (Lr) | `raw × 2` | steps | ⚠️ |
+| 13 | constant `0x72` (114) | mirrors the byte-15 floor | — | |
+| 14 | `dc_bus_voltage` (Uo) | `raw × 2 − 29` | V | ⚠️ |
+| 15 | IPM-temp candidate | | — | ❔ |
+| 16 | `compressor_frequency_actual_avg` int part | `b16 + b17/100` (~10 s avg) | Hz | ❔ |
+| 17 | `compressor_frequency_actual_avg` centi-Hz | (see byte 16) | — | ❔ |
+</details>
 
-### Frame `0001_20` — ODU Core (ODU → IDU)
+<details>
+<summary><b>0001_51 — ODU Performance B (HPB)</b> (ODU → IDU)</summary>
 
-| Byte | Sensor Name | Formula | Unit | Confidence | Notes |
-|------|-------------|---------|------|------------|-------|
-| 6 | `Compressor_Actual_Hz` | `raw` | Hz | ✅ | Real-time running frequency. Smooth ramp, confirmed 0–80 Hz observed |
-| 9 | `T3_ODU_Coil_Temp` | `(raw − 61) / 2` | °C | ⚠️ | Outdoor coil temperature. Goes strongly negative when iced (defrost trigger visible in data), unverified against a reference thermometer |
-| 10 | `T4_Outdoor_Temp` | `(raw * 0.36775) - 17.2` | °C | ⚠️ | Outdoor ambient. Byte 10 gives 0.5°C steps, byte 15 (values 0/64/128/192) adds 0–0.375°C fractional precision. Unverified against reference thermometer |
-| 11 | `TP_Discharge_Temp` | `raw / 2` | °C | ⚠️ | Compressor discharge line temperature |
-| 12 | `Compressor_Actual_Amps` | `raw / 3.2` | A | ⚠️ | Divisor confirmed from service manual (display shows floor(amps); 3.2A displays as "3"). ~6.6A at 57Hz, ~7.8A at 80Hz defrost. Unverified against clamp meter |
-| 13 | `ODU_Unknown_B13` | `raw` | — | ❓ | Narrow range (177–185), stable. Possibly resistance / relates with 0001_50_b14 (AC_Input_Voltes) |
-| 14 | `ODU_Mode` | enum map | — | ✅ | 0x00=Off, 0x01=Cool, 0x02=Heat, 0x03=Fan, 0x04=Dry, 0x07=Defrost |
-| 15 | `T4_Fraction` | `fraction_c = raw / 696.125` | — | ✅ | Quarter-degree fractional component of T4. Values observed: 0, 64, 128, 192 |
-| 17 | `ODU_EEV_Zone_Conf` | `raw` | — | ⚠️ | ODU confirmed/override EEV zone |
+| Byte | Name | Decode | Unit | Tag |
+|---|---|---|---|---|
+| 5 | `outdoor_fan_speed_target` | `raw × 8` | RPM | ✅ |
+| 6 | `eev_steps_target` | `raw × 2` | steps | ⚠️ |
+| 7–10 | constant `0x00` | — | — | |
+| 11 | `run_session_minutes` | raw | min | ✅ |
+| 12 | `run_lifetime_hours` low | `b13×256 + b12` | h | ✅ |
+| 13 | `run_lifetime_hours` high | (see byte 12) | h | ✅ |
+| 14 | unknown — steady `190` | raw | — | ❔ |
+| 15 | unknown — changed once then static (season flag?) | raw | — | ❔ |
+| 16 | constant `106` | — | — | |
+| 17 | constant `161` | — | — | |
+</details>
 
----
+<details>
+<summary><b>0001_52 — ODU Performance C (HPC)</b> (ODU → IDU)</summary>
 
-### Frame `0001_50` — ODU Performance A (HPA)
+| Byte | Name | Decode | Unit | Tag |
+|---|---|---|---|---|
+| 5 | constant `0x22` | — | — | |
+| 6 | constant `0x00` | — | — | |
+| 7 | unknown — PWM carrier kHz? | raw | — | ❔ |
+| 8 | unknown — fan byte? | raw | — | ❔ |
+| 9 | `compressor_pid_step` | signed int8; predicts Hz direction | — | ⚠️ |
+| 10 | unknown | raw | — | ❔ |
+| 11 | unknown | raw | — | ❔ |
+| 12 | constant `0x00` | — | — | |
+| 13 | `outdoor_fan_speed_step` | raw gear index (lookup, not RPM) | — | ⚠️ |
+| 14–17 | constant `0x00` | — | — | |
 
-| Byte | Sensor Name | Formula | Unit | Confidence | Notes |
-|------|-------------|---------|------|------------|-------|
-| 11 | `ODU_Fan_Speed_Actual_RPM` | `raw × 8` | RPM | ✅ | Outdoor fan actual speed. Zero during defrost (fan off confirmed) |
-| 12 | `ODU_DC_Bus_Voltage_Actual` | `raw` | V | ✅ | Rectified DC bus, actual measured value |
-| 14 | `AC_Input_Voltage` | `raw` | V | ✅ | Mains input voltage. Observed 179–207 V, consistent with US 240 V supply variation |
-| 15 | `Inverter_DC_Bus_Voltage` | `raw * 2` | V | ✅ | Inverter-side DC rail, ~134–170 V (rectified from 120 V leg) |
-| 16 | `IPM_Load_Index` | `raw` | — | ⚠️ | Tracks compressor Hz nearly 1:1. Not average amps despite original label. Likely a normalised load or duty index reported by the IPM module |
-| 17 | `IDU_EEV_Position_Pct` | `raw` | — | ⚠️ | Actual indoor EEV position |
+> `compressor_pid_step`: `+7` aggressive ramp (soft-start), `0` off, `−1` steady trim, `−2` decel / thermal protection (seen at high load with rising discharge).
+</details>
 
----
+<details>
+<summary><b>0001_53 — ODU Performance D (HPD)</b> (ODU → IDU)</summary>
 
-### Frame `0001_51` — ODU Performance B (HPB)
-
-| Byte | Sensor Name | Formula | Unit | Confidence | Notes |
-|------|-------------|---------|------|------------|-------|
-| 5 | `ODU_Fan_Speed_Target_RPM` | `raw × 8` | RPM | ✅ | Outdoor fan target speed |
-| 6 | `ODU_DC_Bus_Voltage_Target` | `raw` | V | ✅ | DC bus target setpoint |
-| 11 | `Run_Session_Minutes` | `raw` | min | ✅ | Active running minutes in the current compressor run. Ticks approximately once per real minute. Resets to 0 the moment the compressor stops. Does not roll over at 60 — continues counting until the compressor stops |
-| 12 | `Run_Lifetime_Hours` | `raw` | hrs | ✅ | Lifetime accumulated active running hours, 0–255 component. Increments every ~62 active running minutes. Does not advance when the compressor is off |
-| 13 | `Run_Lifetime_Hours_Overflow` | `raw` | — | ✅ | Increments each time `Run_Lifetime_Hours` rolls past 255. Full lifetime hours = `(byte13 × 256) + byte12`. Unit observed at 3,923 lifetime hours as of first capture (163.5 days of total compressor runtime) |
-
----
-
-### Frame `0001_52` — ODU Performance C (HPC)
-
-| Byte | Sensor Name | Formula | Unit | Confidence | Notes |
-|------|-------------|---------|------|------------|-------|
-| 7 | `IPM_Heatsink_Temp_1` | `raw` | °C | ❓ | No offset/scaling — raw value appears to be °C directly. Varies with ambient (17–20 °C on mild days). Lower of the two heatsink probes |
-| 8 | `IPM_Heatsink_Temp_2` | `raw` | °C | ❓ | Same as above, consistently ~8 °C warmer than Temp_1. Likely a second probe on the same IPM heatsink |
-| 9 | `Compressor_PID_Step` | signed int8 | — | ❓ | Two's complement signed byte. `+7` = aggressive ramp-up (soft-start only). `0` = compressor off. `−1` = steady-state trim. `−2` = active decel / thermal protection (only seen at high load with rising discharge temp) |
-| 10 | `IPM_Phase_Current_A` | `raw` | A | ❓ | IPM module phase current feedback, primary measurement. Raw units — divisor unconfirmed pending clamp meter. Monotonically tracks load: ~4 at 15 Hz, ~9 at 48 Hz, ~13 at 80 Hz defrost |
-| 11 | `IPM_Phase_Current_B` | `raw` | A | ❓ | Secondary phase current, consistently ~0.7× of Phase A across all operating points. Likely a different shunt or phase winding measurement on the same IPM |
-| 13 | `ODU_Fan_Speed_Step` | `raw` | — | ✅ | Fan speed gear index (integer step, not RPM). Correlates with RPM bands |
-
----
-
-### Frame `0001_53` — ODU Performance D (HPD)
-
-| Byte | Sensor Name | Formula | Unit | Confidence | Notes |
-|------|-------------|---------|------|------------|-------|
-| 6 | `Phase_Modifier` | `raw if raw <= 127 else raw - 256` | — | ❓ | Acts as a negative logic flag, an inverted bitmask, or a countdown timer modifier that tells the system what sub-state the current phase is in
-| 7 | `Routine_Phase_Step` | `raw` | — | ❓ | Compressor startup/ramp phase index. Values 0–4 observed at idle/shutdown, higher values during active ramp sequences |
-| 8 | `Active_Ramp_Routine` | `raw` | — | ❓ | Non-zero during oil return or high-load ramp events |
-| 11+12 | `EXV_Position_Steps` | `(byte12 × 256) + byte11` | steps | ✅ | Electronic expansion valve position. 16-bit little-endian. Range ~75 steps (idle) to ~4200 steps (full defrost). Responds correctly to load changes |
-| 13 | `ODU_Target_Hz` | `raw` | Hz | ✅ | ODU's internal PID frequency target. Leads `Compressor_Actual_Hz`. Jumps to 25 Hz at soft-start, then tracks IDU demand. Observed ceiling: 80 Hz during defrost, ~48–58 Hz during normal heating |
-
----
+| Byte | Name | Decode | Unit | Tag |
+|---|---|---|---|---|
+| 5 | constant `0x00` | — | — | |
+| 6 | `drive_comp_index` | signed int8 | — | ❔ |
+| 7 | `cycle_stage` | raw (0–4 idle, higher during ramp) | — | ⚠️ |
+| 8 | `dc_stage` — high-DC-volts flag | raw | — | ⚠️ |
+| 9 | `compressor_state` | `0` Off · `2` Startup · `6` Run | — | ✅ |
+| 10 | constant `0x00` | — | — | |
+| 11 | `total_power` low | `b12×256 + b11` | W | ⚠️ |
+| 12 | `total_power` high | (see byte 11) | W | ⚠️ |
+| 13 | `compressor_frequency_outdoor_target` (FT) | raw; leads Fr | Hz | ✅ |
+| 14–17 | constant `0x00` | — | — | |
+</details>
 
 
----
+## 6. Hardware
 
-## Home Assistant Integration
+A plain **ESP32 dev board** and a **4-pin auto-switching RS-485-to-TTL module** (VCC / GND / RXD / TXD, no DE/RE pins). No level shifter, no dual core — the component only receives.
 
-Parsed telemetry is published to Home Assistant via MQTT discovery. Sensors appear automatically under a `Senville Heat Pump` device in the HA device registry.
+![ESP32 to S1/S2 bus, read-only sniffing](images/wiring.png)
 
-The publisher uses send-on-change logic with a 60-second heartbeat to keep values fresh without flooding the broker.
-
-**Example metrics visible in HA:**
-
-- Compressor Hz (actual vs. target)
-- EXV position
-- Bus voltage (AC in, DC bus, inverter)
-- All temperature sensors
-- Fan RPM (actual vs. target)
-- PID error terms
-- Runtime clock
-
----
-
-## Database Logging
-
-Frames are logged to a daily-rotating SQLite database under `SQLITE_DB_DIR`.
-
-Each row captures a message cycle — one snapshot of all six decoded frame types — timestamped at the moment the cycle completes. Payload bytes are stored individually as named columns (`IDU5`–`IDU17`, `ODU5`–`ODU17`, etc.) for direct SQL querying.
-
----
-
-## Hardware
-
-| Component | Purpose |
+| RS-485 module | Connects to |
 |---|---|
-| Waveshare RS485-to-Ethernet | Passive bus tap via TCP stream |
-| S1/S2 HVAC wires | RS485 differential pair |
+| `A` | S1 (bus) — differential pair only, no ground here |
+| `B` | S2 (bus) — differential pair only, no ground here |
+| `RXD` | ESP32 RX pin (`GPIO16` / `RX2` in the example) |
+| `VCC` | ESP32 `3V3` *(what I use; some modules want 5 V)* |
+| `GND` | ESP32 `GND` — **required** |
+| `TXD` | **leave unconnected** — this is what keeps it read-only |
 
-> **⚡ Bus Voltage — Important:** On this system the S1/S2 lines run at **5V**. This is specific to central air configurations where the indoor and outdoor units have **separate mains power supplies**. Most mini-split and single-power-supply units run their S-Comms bus at significantly higher voltages. Do not assume 5V — always measure before connecting any interface hardware.
+> [!IMPORTANT]
+> **Common ground is required, or you get no signal.** Every ground pin on the RS-485 module must tie to the ESP32's `GND` (if the module has two GND pads, connect both). Without a shared reference the UART has nothing to measure against and no frames decode — the single most common cause of a silent build. The **S1/S2 bus itself has no ground**: it is only the differential pair (`A`→S1, `B`→S2), so all grounding stays on your device. If you see no valid frames, swap `A`/`B` — polarity is not critical for a listener and nothing is harmed.
 
-![Waveshare Setup](images/Waveshare_Setup.png)
-
----
-
-## ⚠️ Safety Notice
-
-HVAC inverter systems may expose mains voltage on communication terminals depending on system design. Improper probing of HVAC control boards can result in serious injury, equipment damage, or voided warranties.
-
-This project was developed on a **central air unit where the indoor and outdoor units are on separate mains circuits**. This is why the S1S2 bus on this system measures at **5V**. Many other Midea-based systems — particularly mini-splits where both units share a single power supply — run their S1S2 bus at much higher voltages and may present hazardous potentials on those same terminals.
-
-**Always measure bus voltage and verify electrical conditions before connecting any interface hardware.**
+The ESP is **wall-powered** (the bus supplies no usable power); use any standard isolated USB supply.
 
 ---
 
-## Contributing
+## 7. Installation (ESPHome)
 
-If you're working with Midea or Senville inverter systems and have additional frame captures, sensor mappings, or scaling corrections, contributions are welcome. Open an issue or [Home Assistant Discussion Thread](https://community.home-assistant.io/t/reverse-engineering-senville-midea-s1s2-bus/992233)
+Flash the ESP32 with [ESPHome](https://esphome.io/):
+
+```bash
+pip install esphome
+esphome run example_midea_s1s2.yaml
+```
+
+The example uses a local `components:` source, so it flashes from a checkout of this repo (switch to `github://MidATRIX/midea-s1s2-rs485-monitor` to pull remotely).
+
+Key configuration:
+
+```yaml
+uart:
+  id: s1s2_uart
+  rx_pin: GPIO16
+  baud_rate: 4800
+  rx_buffer_size: 1024          # a full cycle is ~480 bytes; don't starve it
+
+midea_s1s2:
+  uart_id: s1s2_uart
+  raw_topic_prefix: midea_s1s2/frames   # raw frames → MQTT (optional)
+```
+
+- **Home Assistant** sensors arrive over the **native API** — no MQTT discovery, no broker in that path. Add the ESPHome integration (or accept the discovered device). Modes arrive as `text_sensor`s; everything numeric is a `sensor`. A `crc_errors` diagnostic sensor exposes bus health.
+- Decode formulas live in `components/midea_s1s2/midea_s1s2.cpp`, one line per field — edit the math there and reflash.
 
 ---
 
-![HA Sensors](images/2026-06-06_10-50-29.png)
+## 8. Archiving & dashboards
 
-![HA Sensors](images/2026-06-06_10-50-55.png)
+Set `raw_topic_prefix` and add an `mqtt:` block (`discovery: false`, so HA is fed only by the native API) and the component publishes every CRC-validated frame as uppercase hex to `midea_s1s2/frames/<msg_id>`:
 
-![HA Sensors](images/2026-06-06_10-51-11.png)
+```
+midea_s1s2/frames/0001_20  A00001200C123900009292A319B001C0013C3687
+```
 
-![HA Sensors](images/2026-06-06_10-51-29.png)
+This raw feed drives the tools in [`tools/`](tools/):
 
-![HA Sensors](images/2026-06-06_10-51-43.png)
+- **`s1s2_capture.py`** — subscribes to the feed and writes daily SQLite databases (crash-safe WAL) and/or InfluxDB v2 (raw bytes, one point per cycle). A separate log records any *undecoded* byte that changes, so movement in an unmapped byte is surfaced for decoding.
+- **Grafana dashboard** ([`grafana/`](grafana/)) — imports against the raw InfluxDB bucket and decodes in the Flux queries, so it works for anyone on the InfluxDB path without Home Assistant.
 
-![HA Sensors](images/2026-06-06_10-51-56.png)
+Per-frame publishing is deliberate: a flag set for a single frame survives, instead of being averaged away across a cycle.
 
 ---
 
-## License
+## 9. Method, sources and confidence
 
-[MIT License](LICENSE)
+- **Receiver:** ESP32 + RS-485-TTL module, passive tap on S1/S2, decoded by a custom ESPHome component. Only CRC-valid frames are used.
+- **Data:** continuous multi-season SQLite capture (winter/summer), cross-checked against an outdoor-unit test-port log, the unit's own point-check display, and the Senville app.
+- **Cross-checks:** the HA/HB wall-controller bus (which re-broadcasts this same S1/S2 telemetry) independently matched the EEV, DC-bus, power and runtime decodes documented here.
+
+| Tag | Meaning |
+|---|---|
+| ✅ | Confirmed — physically verified, or exact match to a confirmed field |
+| ⚠️ | Probable — formula fits and is plausible, not ground-truthed |
+| ❔ | Unknown — captured, meaning not yet decoded |
+
+---
+
+## Related projects
+
+- [midea-telemetry-esphome (fmck3516)](https://github.com/fmck3516/midea-telemetry-esphome) — Midea ODU diagnostic test-port telemetry; shares the thermistor curves used here.
+- [ESPHome-Midea-XYE (HomeOps)](https://github.com/HomeOps/ESPHome-Midea-XYE) — the XYE/CCM wired-thermostat bus; cross-references this project's field map.
+- Midea HA/HB wall-controller bus notes — the premium wired-controller bus, which re-broadcasts this S1/S2 telemetry and was used to cross-validate these decodes.
+
+Each bus uses a different preamble, checksum and addressing scheme, so **decoders are not portable between them** — verify byte offsets before porting anything.
+
+---
+
+*Maintained by [MidATRIX](https://github.com/MidATRIX). Unofficial; not affiliated with Midea. Use at your own risk — see [LICENSE](LICENSE).*
