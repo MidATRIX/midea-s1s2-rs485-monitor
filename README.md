@@ -369,7 +369,7 @@ Per-frame publishing is deliberate: a flag set for a single frame survives, inst
 
 - [midea-telemetry-esphome (fmck3516)](https://github.com/fmck3516/midea-telemetry-esphome) — Midea ODU diagnostic test-port telemetry; shares the thermistor curves used here.
 - [ESPHome-Midea-XYE (HomeOps)](https://github.com/HomeOps/ESPHome-Midea-XYE) — the XYE/CCM wired-thermostat bus; cross-references this project's field map.
-- Midea HA/HB wall-controller bus notes — the premium wired-controller bus, which re-broadcasts S1/S2, XYE telemetry, and IDU sensors on my unit.
+- [Midea HA/HB wall-controller bus notes](https://github.com/MidATRIX/midea-hahb) — the premium wired-controller bus, which re-broadcasts S1/S2, XYE telemetry, and IDU sensors on my unit.
 
 Each bus uses a different preamble, checksum and addressing scheme, so **decoders are not portable between them** — verify byte offsets before porting anything.
 
