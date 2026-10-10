@@ -134,7 +134,7 @@ ODU 20 → IDU 20 → ODU 91 → IDU 91
 - Frame `91` is an all-zero keepalive.
 - IDU replies to `50`–`53` and `91` are acknowledgements only — all-zero payloads. **The ODU is the sole data source in those exchanges.**
 
-The ESPHome component records the six data frames (`0100_20`, `0001_20`, `0001_50`–`53`) and drops the `21` handshake and `91` keepalive.
+The ESPHome component decodes the six data frames (`0100_20`, `0001_20`, `0001_50`–`53`) into Home Assistant sensors, and publishes **every** CRC-valid frame — including the `21` handshakes, `91` keepalives, IDU acks and boot frames — raw to MQTT (§8).
 
 ---
 
@@ -157,7 +157,7 @@ The ESPHome component records the six data frames (`0100_20`, `0001_20`, `0001_5
 
 **Tags:** ✅ confirmed (physically verified or exact match to a confirmed field) · ⚠️ probable (formula fits, physically plausible, not ground-truthed) · ❔ unknown (captured, meaning not decoded).
 
-Temperatures use an NTC thermistor curve unless noted; the discharge sensor uses a Steinhart–Hart curve. Both are in [section 8](#8-installation-esphome) / the component source.
+Temperatures use an NTC thermistor curve unless noted; the discharge sensor uses a Steinhart–Hart curve. Both are below and in the component source.
 
 ```
 ntc_temp(v)   = 1 / (1/298.15 + ln(0.81·(255−v)/v) / 4150) − 273.15
@@ -273,7 +273,7 @@ stein_temp(v) = 1 / (2.873e-3 + 2.491e-4·L + 9.74e-7·L³) − 273.15,  L = ln(
 
 ## 6. Hardware
 
-A plain **ESP32 dev board** and a **4-pin auto-switching RS-485-to-TTL module** (VCC / GND / RXD / TXD, no DE/RE pins). No level shifter, no dual core — the component only receives.
+An **ESP32-C3** board (SuperMini, XIAO ESP32-C3 and similar) and a **4-pin auto-switching RS-485-to-TTL module** (VCC / GND / RXD / TXD, no DE/RE pins). No level shifter, no dual core — the component only receives.
 
 ![ESP32 to S1/S2 bus, read-only sniffing](images/wiring.png)
 
@@ -281,7 +281,7 @@ A plain **ESP32 dev board** and a **4-pin auto-switching RS-485-to-TTL module** 
 |---|---|
 | `A` | S1 (bus) — differential pair only, no ground here |
 | `B` | S2 (bus) — differential pair only, no ground here |
-| `RXD` | ESP32 RX pin (`GPIO16` / `RX2` in the example) |
+| `RXD` | any free ESP32-C3 GPIO — `GPIO20` in the example; set `rx_pin` to whatever you wire |
 | `VCC` | ESP32 `3V3` *(what I use; some modules want 5 V)* |
 | `GND` | ESP32 `GND` — **required** |
 | `TXD` | **leave unconnected** — this is what keeps it read-only |
@@ -295,12 +295,15 @@ The ESP is **wall-powered** (the bus supplies no usable power); use any standard
 
 ## 7. Installation (ESPHome)
 
-Flash the ESP32 with [ESPHome](https://esphome.io/):
+Flash the ESP32-C3 with [ESPHome](https://esphome.io/). Full step-by-step (download to `/opt/midea-s1s2-rs485-monitor`, virtual environment, broker, running the capture as a service) is in **[docs/SETUP.md](docs/SETUP.md)**; the short version:
 
 ```bash
-pip install esphome
+cp secrets.yaml.example secrets.yaml   # fill in WiFi, MQTT and InfluxDB
+pip install -r requirements.txt        # inside a venv
 esphome run example_midea_s1s2.yaml
 ```
+
+`secrets.yaml` is the one config file for the whole project: the ESP is flashed from it, and the capture script (§8) reads the same file.
 
 The example uses a local `components:` source, so it flashes from a checkout of this repo (switch to `github://MidATRIX/midea-s1s2-rs485-monitor` to pull remotely).
 
@@ -309,7 +312,7 @@ Key configuration:
 ```yaml
 uart:
   id: s1s2_uart
-  rx_pin: GPIO16
+  rx_pin: GPIO20                # the GPIO your module's RXD is wired to — change to match
   baud_rate: 4800
   rx_buffer_size: 1024          # a full cycle is ~480 bytes; don't starve it
 
@@ -325,7 +328,16 @@ midea_s1s2:
 
 ## 8. Archiving & dashboards
 
-Set `raw_topic_prefix` and add an `mqtt:` block (`discovery: false`, so HA is fed only by the native API) and the component publishes every CRC-validated frame as uppercase hex to `midea_s1s2/frames/<msg_id>`:
+Set `raw_topic_prefix` and add an `mqtt:` block and the component publishes every CRC-validated frame as uppercase hex to `midea_s1s2/frames/<msg_id>`:
+
+```yaml
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_user
+  password: !secret mqtt_pass
+  discovery: false      # HA is fed only by the native API — no duplicate device
+  reboot_timeout: 0s    # a dead broker never reboots the ESP
+```
 
 ```
 midea_s1s2/frames/0001_20  A00001200C123900009292A319B001C0013C3687
@@ -333,7 +345,7 @@ midea_s1s2/frames/0001_20  A00001200C123900009292A319B001C0013C3687
 
 This raw feed drives the tools in [`tools/`](tools/):
 
-- **`s1s2_capture.py`** — subscribes to the feed and writes daily SQLite databases (crash-safe WAL) and/or InfluxDB v2 (raw bytes, one point per cycle). A separate log records any *undecoded* byte that changes, so movement in an unmapped byte is surfaced for decoding.
+- **`s1s2_capture.py`** — subscribes to the feed and writes InfluxDB v2: one point per frame, each raw byte an integer field named by its position (`IDU13`, `ODU6`, `HPD13`, … — the names used in §5). Configured from the same `secrets.yaml`; see [docs/SETUP.md](docs/SETUP.md). A separate log records any *undecoded* byte that changes, so movement in an unmapped byte is surfaced for decoding.
 - **Grafana dashboard** ([`grafana/`](grafana/)) — imports against the raw InfluxDB bucket and decodes in the Flux queries, so it works for anyone on the InfluxDB path without Home Assistant.
 
 Per-frame publishing is deliberate: a flag set for a single frame survives, instead of being averaged away across a cycle.
@@ -358,7 +370,7 @@ Per-frame publishing is deliberate: a flag set for a single frame survives, inst
 
 - [midea-telemetry-esphome (fmck3516)](https://github.com/fmck3516/midea-telemetry-esphome) — Midea ODU diagnostic test-port telemetry; shares the thermistor curves used here.
 - [ESPHome-Midea-XYE (HomeOps)](https://github.com/HomeOps/ESPHome-Midea-XYE) — the XYE/CCM wired-thermostat bus; cross-references this project's field map.
-- Midea HA/HB wall-controller bus notes — the premium wired-controller bus, which re-broadcasts this S1/S2 telemetry and was used to cross-validate these decodes.
+- Midea HA/HB wall-controller bus notes — the premium wired-controller bus, which re-broadcasts S1/S2, XYE telemetry, and IDU sensors on my unit.
 
 Each bus uses a different preamble, checksum and addressing scheme, so **decoders are not portable between them** — verify byte offsets before porting anything.
 
