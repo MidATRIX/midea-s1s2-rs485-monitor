@@ -1,0 +1,25 @@
+# midea-s1s2-rs485-monitor - Python dependencies
+#
+# Run inside a virtual environment:
+#
+#   python3 -m venv venv
+#   source venv/bin/activate        # Linux / macOS
+#   venv\Scripts\activate           # Windows
+#   pip install -r requirements.txt
+#
+# To leave the venv:  deactivate
+
+# Flashing the ESP (skip if this machine only runs the capture script)
+esphome
+
+# Capture script: subscribes to the ESP's raw-frame MQTT feed
+paho-mqtt>=1.6.1
+
+# Capture script: reads secrets.yaml
+pyyaml
+
+# Capture script: the built-in broker for --amqtt. Pinned to 0.12.x - its
+# config and password format changed between releases; tested on 0.12.1.
+amqtt~=0.12.1
+
+# sqlite3, asyncio, argparse and urllib are Python standard library
