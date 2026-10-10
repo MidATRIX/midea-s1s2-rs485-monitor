@@ -1,0 +1,34 @@
+# systemd unit for s1s2_capture.py - keeps the capture running across crashes
+# and reboots, so the InfluxDB feed has no gaps (frames published while this is
+# down are lost; MQTT does not backfill).
+#
+# Install:
+#   sudo cp midea-s1s2-capture.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now midea-s1s2-capture
+#   journalctl -u midea-s1s2-capture -f      # watch it
+#
+# Edit User= (the user that owns the repo folder - see docs/SETUP.md section 2)
+# and, if the repo isn't in /opt/midea-s1s2-rs485-monitor, the paths below.
+# The script reads secrets.yaml from the repo root.
+# Using the built-in broker? Add --amqtt to the end of the ExecStart line.
+
+[Unit]
+Description=Midea S1S2 raw-frame capture (MQTT -> InfluxDB/SQLite)
+# Start after Mosquitto when it runs on this PC (harmless if it doesn't)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/opt/midea-s1s2-rs485-monitor/tools
+# Use the venv's python so paho-mqtt / pyyaml / amqtt are found
+ExecStart=/opt/midea-s1s2-rs485-monitor/venv/bin/python /opt/midea-s1s2-rs485-monitor/tools/s1s2_capture.py
+Restart=always
+RestartSec=5
+# Send each output line to the journal immediately instead of in buffered chunks
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
