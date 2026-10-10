@@ -10,8 +10,8 @@
 # Flash:  esphome run example_midea_s1s2.yaml
 #
 # HA integration is the native API (no MQTT discovery). The mqtt block below
-# exists ONLY to carry the raw frame firehose for Telegraf/InfluxDB and
-# s1s2_matrix.py — discovery is off so HA doesn't double-register the device.
+# exists ONLY to carry the raw frame firehose for Telegraf/InfluxDB
+# discovery is off so HA doesn't double-register the device.
 
 esphome:
   name: midea-s1s2
