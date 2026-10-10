@@ -24,7 +24,7 @@ The outdoor unit (ODU) is the bus master. It continuously exchanges frames with 
 6. [Field maps (every byte)](#5-field-maps)
 7. [Hardware](#6-hardware)
 8. [Installation (ESPHome)](#7-installation-esphome)
-9. [Archiving & dashboards](#8-archiving--dashboards)
+9. [Archiving](#8-archiving)
 10. [Method, sources and confidence](#9-method-sources-and-confidence)
 11. [Related projects](#related-projects)
 
@@ -326,7 +326,7 @@ midea_s1s2:
 
 ---
 
-## 8. Archiving & dashboards
+## 8. Archiving
 
 Set `raw_topic_prefix` and add an `mqtt:` block and the component publishes every CRC-validated frame as uppercase hex to `midea_s1s2/frames/<msg_id>`:
 
@@ -346,7 +346,6 @@ midea_s1s2/frames/0001_20  A00001200C123900009292A319B001C0013C3687
 This raw feed drives the tools in [`tools/`](tools/):
 
 - **`s1s2_capture.py`** — subscribes to the feed and writes InfluxDB v2: one point per frame, each raw byte an integer field named by its position (`IDU13`, `ODU6`, `HPD13`, … — the names used in §5). Configured from the same `secrets.yaml`; see [docs/SETUP.md](docs/SETUP.md). A separate log records any *undecoded* byte that changes, so movement in an unmapped byte is surfaced for decoding.
-- **Grafana dashboard** ([`grafana/`](grafana/)) — imports against the raw InfluxDB bucket and decodes in the Flux queries, so it works for anyone on the InfluxDB path without Home Assistant.
 
 Per-frame publishing is deliberate: a flag set for a single frame survives, instead of being averaged away across a cycle.
 
