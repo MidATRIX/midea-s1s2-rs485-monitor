@@ -36,7 +36,31 @@ unconnected — that is what guarantees the monitor can never transmit on the bu
 
 ## 2. Install
 
-One-time setup on the PC, from the repo root.
+One-time setup on the PC.
+
+**Get the repo.** Everyone needs it — the ESP firmware builds from the local
+`components/` folder. These docs and the systemd unit use
+`/opt/midea-s1s2-rs485-monitor`:
+
+```bash
+sudo git clone https://github.com/MidATRIX/midea-s1s2-rs485-monitor.git /opt/midea-s1s2-rs485-monitor
+sudo chown -R $USER: /opt/midea-s1s2-rs485-monitor
+cd /opt/midea-s1s2-rs485-monitor
+```
+
+The `chown` makes the folder yours, so creating the venv, editing
+`secrets.yaml` and running the capture don't need `sudo`. To update later:
+`git pull` (your `secrets.yaml` is gitignored and stays put).
+
+*No git?* GitHub → **Code → Download ZIP** works too: it extracts as
+`midea-s1s2-rs485-monitor-main`, so move it to `/opt/midea-s1s2-rs485-monitor`
+and run the same `chown`. Updating means downloading again — don't overwrite
+your `secrets.yaml`.
+
+*Somewhere other than `/opt`?* Fine — e.g. `~/midea-s1s2-rs485-monitor`. Only
+the paths in `tools/midea-s1s2-capture.service` need to match.
+
+Everything below runs from the repo folder.
 
 **Python packages, in a virtual environment:**
 
@@ -200,9 +224,17 @@ Frames published while the capture is down are **lost** — MQTT at QoS 0 does n
 backfill. Keep it always-on with the included systemd unit so InfluxDB has no
 gaps:
 
+Before installing it, edit the unit:
+
+- **`User=`** — the user that owns the repo folder (the one you ran `chown`
+  for in §2).
+- **The paths** — only if you put the repo somewhere other than
+  `/opt/midea-s1s2-rs485-monitor`.
+- **`--amqtt`** — add it to the end of `ExecStart` if you use the built-in
+  broker.
+
 ```bash
 sudo cp tools/midea-s1s2-capture.service /etc/systemd/system/
-# edit User= and the paths inside the unit first (add --amqtt if you use it)
 sudo systemctl daemon-reload
 sudo systemctl enable --now midea-s1s2-capture
 journalctl -u midea-s1s2-capture -f
